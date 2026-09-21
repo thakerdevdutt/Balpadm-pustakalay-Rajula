@@ -1,0 +1,6 @@
+{
+  "name": "બાલપદ્મ પુસ્તકાલય - રાજુલા",
+  "description": "બાલપદ્મ પુસ્તકાલય - રાજુલા - પુસ્તક સંગ્રહ અને લાઈબ્રેરી મેનેજમેન્ટ સિસ્ટમ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

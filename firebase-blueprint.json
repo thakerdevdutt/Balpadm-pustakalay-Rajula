@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Books": {
+      "title": "Books",
+      "description": "Stores complete details of books in the library",
+      "type": "object",
+      "properties": {
+        "bookId": { "type": "string" },
+        "bookName": { "type": "string" },
+        "author": { "type": "string" },
+        "translator": { "type": "string" },
+        "publisher": { "type": "string" },
+        "category": { "type": "string" },
+        "language": { "type": "string" },
+        "bookType": { "type": "string" },
+        "edition": { "type": "string" },
+        "yearPublished": { "type": "string" },
+        "isbn": { "type": "string" },
+        "rate": { "type": "number" },
+        "remarks1": { "type": "string" },
+        "addedDate": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "isIssued": { "type": "boolean" },
+        "currentBorrowerName": { "type": "string" },
+        "currentIssueDueDate": { "type": "string" }
+      },
+      "required": ["bookId", "bookName"]
+    },
+    "MasterData": {
+      "title": "MasterData",
+      "description": "Master dropdown options (authors, categories, publishers, etc.)",
+      "type": "object",
+      "properties": {
+        "authors": { "type": "array", "items": { "type": "string" } },
+        "categories": { "type": "array", "items": { "type": "string" } },
+        "translators": { "type": "array", "items": { "type": "string" } },
+        "languages": { "type": "array", "items": { "type": "string" } },
+        "publishers": { "type": "array", "items": { "type": "string" } },
+        "bookTypes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Borrowers": {
+      "title": "Borrowers",
+      "description": "History and active book issue/return records",
+      "type": "object",
+      "properties": {
+        "issueId": { "type": "string" },
+        "bookId": { "type": "string" },
+        "bookName": { "type": "string" },
+        "borrowerName": { "type": "string" },
+        "address": { "type": "string" },
+        "mobile": { "type": "string" },
+        "issueDate": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "status": { "type": "string" },
+        "returnDate": { "type": "string" },
+        "remark": { "type": "string" }
+      },
+      "required": ["issueId", "bookId"]
+    },
+    "Users": {
+      "title": "Users",
+      "description": "System accounts and permissions (Admin / User)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["username", "role"]
+    }
+  }
+}
