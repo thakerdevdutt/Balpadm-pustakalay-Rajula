@@ -27,9 +27,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 }) => {
   const isLight = theme === 'light';
   const isSepia = theme === 'sepia';
-  // Default Admin account
+  // Default Admin and Super User accounts
   const defaultAccounts: AppUser[] = [
     { id: 'admin', username: 'admin', name: 'Devdutt Thaker', role: 'Admin', password: 'Malvee@0911', secondaryPassword: '0911' },
+    { id: 'jignesh', username: 'jignesh', name: 'Jignesh Upadhyay', role: 'Super User', password: '1234' },
   ];
 
   // Merge cloud users with defaults

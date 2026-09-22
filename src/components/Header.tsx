@@ -308,26 +308,20 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </label>
 
-        {/* Clear Database (Admin Only) */}
-        {onClearAll && (
+        {/* Clear Database (Strictly Admin Only) */}
+        {currentUser?.role === 'Admin' && onClearAll && (
           <button
             id="btn-header-clear-database"
             type="button"
-            onClick={() => {
-              if (currentUser?.role !== 'Admin') {
-                alert('⚠️ મનાઈ (Permission Denied): ડેટાબેઝ સાફ કરવાની સુવિધા ફક્ત Admin માટે જ ઉપલબ્ધ છે.');
-                return;
-              }
-              onClearAll();
-            }}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs uppercase font-medium transition-colors border ${
+            onClick={onClearAll}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs uppercase font-medium transition-colors border cursor-pointer ${
               isLight
-                ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 shadow-sm'
                 : isSepia
-                ? 'bg-[#f8e6e2] hover:bg-[#f1d5cf] text-[#8e2920] border-[#e2bdb5]'
-                : 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border-rose-800/60'
-            } ${currentUser?.role !== 'Admin' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-            title={currentUser?.role !== 'Admin' ? 'Admin permission required' : 'લાઈબ્રેરીનો તમામ ડેટા સાફ કરી 0 પુસ્તકો કરો (Clear Database)'}
+                ? 'bg-[#f8e6e2] hover:bg-[#f1d5cf] text-[#8e2920] border-[#e2bdb5] shadow-sm'
+                : 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border-rose-800/60 shadow-sm'
+            }`}
+            title="લાઈબ્રેરીનો તમામ ડેટા સાફ કરી 0 પુસ્તકો કરો (Clear Database) - ફક્ત Admin માટે"
           >
             <Trash2 className="w-3.5 h-3.5 text-rose-500" />
             <span>CLEAR DATA</span>

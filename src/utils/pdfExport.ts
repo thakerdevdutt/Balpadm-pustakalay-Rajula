@@ -1,4 +1,5 @@
 import { Book } from '../types';
+import { resolveBookCreatedBy } from '../initialData';
 
 export function openCatalogPrintView(
   books: Book[],
@@ -23,10 +24,7 @@ export function openCatalogPrintView(
   // Group books by User (createdBy)
   const userMap = new Map<string, Book[]>();
   for (const book of allBooks) {
-    let user = (book.createdBy || '').trim();
-    if (!user || user.toLowerCase() === 'admin') {
-      user = 'Devdutt Thaker';
-    }
+    const user = resolveBookCreatedBy(book.bookId, book.createdBy);
 
     if (selectedUserFilter !== 'ALL' && user !== selectedUserFilter) {
       continue;

@@ -69,6 +69,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
   // Merge default accounts with allUsers
   const defaultAccounts: AppUser[] = [
     { id: 'admin', username: 'admin', name: 'Devdutt Thaker', role: 'Admin', password: 'Malvee@0911', secondaryPassword: '0911' },
+    { id: 'jignesh', username: 'jignesh', name: 'Jignesh Upadhyay', role: 'Super User', password: '1234' },
   ];
   const userMap = new Map<string, AppUser>();
   defaultAccounts.forEach(u => userMap.set((u.username || u.id).toLowerCase(), u));
@@ -188,7 +189,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
       const updated = { ...prev, [activeTab]: updatedList };
       localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updated));
       localStorage.setItem('my_book_collection_masters', JSON.stringify(updated));
-      saveMasterDataToFirestore(updated).catch((err) => console.error('Firestore save masters error:', err));
+      saveMasterDataToFirestore(updated).catch((err) => console.warn('Firestore save masters error:', err));
       return updated;
     });
     setNewItemText('');
@@ -207,7 +208,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
     setMasters(updated);
     localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updated));
     localStorage.setItem('my_book_collection_masters', JSON.stringify(updated));
-    saveMasterDataToFirestore(updated).catch((err) => console.error('Firestore save masters error:', err));
+    saveMasterDataToFirestore(updated).catch((err) => console.warn('Firestore save masters error:', err));
 
     setSelectedIndices((prev) =>
       prev.filter((i) => i !== indexToRemove).map((i) => (i > indexToRemove ? i - 1 : i))
@@ -226,7 +227,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
       const updated = { ...prev, [activeTab]: currentList };
       localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updated));
       localStorage.setItem('my_book_collection_masters', JSON.stringify(updated));
-      saveMasterDataToFirestore(updated).catch((err) => console.error('Firestore save masters error:', err));
+      saveMasterDataToFirestore(updated).catch((err) => console.warn('Firestore save masters error:', err));
       return updated;
     });
   };
@@ -243,7 +244,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
       const updated = { ...prev, [activeTab]: list };
       localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updated));
       localStorage.setItem('my_book_collection_masters', JSON.stringify(updated));
-      saveMasterDataToFirestore(updated).catch((err) => console.error('Firestore save masters error:', err));
+      saveMasterDataToFirestore(updated).catch((err) => console.warn('Firestore save masters error:', err));
       return updated;
     });
   };
@@ -266,7 +267,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
       const updated = { ...prev, [activeTab]: currentList };
       localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updated));
       localStorage.setItem('my_book_collection_masters', JSON.stringify(updated));
-      saveMasterDataToFirestore(updated).catch((err) => console.error('Firestore save masters error:', err));
+      saveMasterDataToFirestore(updated).catch((err) => console.warn('Firestore save masters error:', err));
       return updated;
     });
     setEditingIndex(null);
@@ -299,7 +300,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
       const updated = { ...prev, [activeTab]: [] };
       localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updated));
       localStorage.setItem('my_book_collection_masters', JSON.stringify(updated));
-      saveMasterDataToFirestore(updated).catch((err) => console.error('Firestore save masters error:', err));
+      saveMasterDataToFirestore(updated).catch((err) => console.warn('Firestore save masters error:', err));
       return updated;
     });
     setSelectedIndices([]);
@@ -323,7 +324,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
       const updated = { ...prev, [activeTab]: updatedList };
       localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updated));
       localStorage.setItem('my_book_collection_masters', JSON.stringify(updated));
-      saveMasterDataToFirestore(updated).catch((err) => console.error('Firestore save masters error:', err));
+      saveMasterDataToFirestore(updated).catch((err) => console.warn('Firestore save masters error:', err));
       return updated;
     });
     setSelectedIndices([]);
@@ -450,7 +451,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
         if (totalAdded > 0) {
           setMasters(updatedMasters);
           localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updatedMasters));
-          saveMasterDataToFirestore(updatedMasters).catch((err) => console.error('Firestore save masters error:', err));
+          saveMasterDataToFirestore(updatedMasters).catch((err) => console.warn('Firestore save masters error:', err));
           if (showToast) showToast(`✅ ${totalAdded} નવા નામ "${tabLabels[activeTab]}" માં સફળતાપૂર્વક Import થયા!`);
         } else {
           if (showToast) showToast('ℹ️ કોઈ નવા નામ મળ્યા નથી અથવા બધા નામ પહેલેથી જ હાજર છે.');
@@ -551,7 +552,7 @@ export const MasterManagementModal: React.FC<MasterManagementModalProps> = ({
         if (totalAdded > 0) {
           setMasters(updatedMasters);
           localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updatedMasters));
-          saveMasterDataToFirestore(updatedMasters).catch((err) => console.error('Firestore save masters error:', err));
+          saveMasterDataToFirestore(updatedMasters).catch((err) => console.warn('Firestore save masters error:', err));
           if (showToast) showToast(`✅ ${totalAdded} નવા નામ તમામ માસ્ટર વિભાગોમાં સફળતાપૂર્વક Import થયા!`);
         } else {
           if (showToast) showToast('ℹ️ કોઈ નવા નામ મળ્યા નથી અથવા બધા નામ પહેલેથી જ હાજર છે.');

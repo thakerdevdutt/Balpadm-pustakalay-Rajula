@@ -1,8 +1,82 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Book, BorrowerRecord, MasterData, SearchCriterion, BackupItem, PDFExportItem, AppUser, AppTheme } from './types';
-import { INITIAL_BOOKS, SAMPLE_BOOKS, INITIAL_BORROWERS, INITIAL_MASTERS } from './data/initialData';
-import { exportDatabaseToExcel, parseExcelFile, parseGoogleSheetUrl, fixGarbledText } from './utils/excelExport';
-import { getPCPath, getWinPath } from './utils/filePath';
+import { INITIAL_BOOKS, SAMPLE_BOOKS, INITIAL_BORROWERS, INITIAL_MASTERS, resolveBookCreatedBy } from './initialData';
+import { exportDatabaseToExcel, parseExcelFile, parseGoogleSheetUrl, fixGarbledText, cleanBookTitle } from './utils/excelExport';
+
+// Inlined file path helpers for local file links
+function isMacSystem(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const platform = navigator.platform || '';
+  const userAgent = navigator.userAgent || '';
+  return /Mac|iPhone|iPad|iPod/i.test(platform) || /Mac|iPhone|iPad|iPod/i.test(userAgent);
+}
+
+function getBookFileName(book: Book | null): string {
+  if (!book || !book.bookName) return 'SampleBook.pdf';
+  const rawTitle = book.bookName.trim();
+  const ext = book.bookType?.toLowerCase().includes('epub') ? '.epub' : '.pdf';
+  if (rawTitle.toLowerCase().endsWith('.pdf') || rawTitle.toLowerCase().endsWith('.epub')) {
+    return rawTitle;
+  }
+  const bookIdStr = String(book.bookId || '').trim();
+  if (bookIdStr) {
+    const idPrefixRegex = new RegExp(`^${bookIdStr}[\\s\\-_.]+`, 'i');
+    if (idPrefixRegex.test(rawTitle)) {
+      return `${rawTitle}${ext}`;
+    }
+  }
+  return `${book.bookId} - ${rawTitle}${ext}`;
+}
+
+function getWinPath(book: Book | null, localDirectory: string, wrapInQuotes: boolean = false): string {
+  let normDir = (localDirectory || 'D:\\My Books\\My Books').trim().replace(/^["']+|["']+$/g, '');
+  if (normDir.startsWith('/') || normDir.startsWith('~')) {
+    normDir = 'D:\\My Books\\My Books';
+  }
+  normDir = normDir.replace(/[/\\]+$/, '');
+  const fileName = getBookFileName(book);
+  const fullPath = `${normDir}\\${fileName}`;
+  return wrapInQuotes ? `"${fullPath}"` : fullPath;
+}
+
+function getMacPath(book: Book | null, localDirectory: string, wrapInQuotes: boolean = true, includeOpenCmd: boolean = true): string {
+  let normDir = (localDirectory || '/Volumes/D-My Works/My Books/My Books').trim().replace(/^["']+|["']+$/g, '');
+  if (/^[a-zA-Z]:/.test(normDir) || normDir.includes('\\')) {
+    const driveMatch = normDir.match(/^([a-zA-Z]):/);
+    if (driveMatch) {
+      const driveLetter = driveMatch[1].toUpperCase();
+      const driveMap: Record<string, string> = {
+        'C': '/Volumes/C-Windows11',
+        'D': '/Volumes/D-My Works',
+        'E': '/Volumes/E-Backup',
+        'F': '/Volumes/F-All in On',
+        'G': '/Volumes/G-Movies',
+      };
+      const macVolume = driveMap[driveLetter] || `/Volumes/${driveLetter}-Drive`;
+      const restOfPath = normDir.replace(/^[a-zA-Z]:/, '').replace(/\\/g, '/');
+      normDir = `${macVolume}${restOfPath}`;
+    } else {
+      normDir = normDir.replace(/\\/g, '/');
+    }
+  }
+  if (!normDir.startsWith('/') && !normDir.startsWith('~')) {
+    normDir = `/Volumes/D-My Works/${normDir}`;
+  }
+  normDir = normDir.replace(/\/+$/, '');
+  const fileName = getBookFileName(book);
+  const fullPath = `${normDir}/${fileName}`;
+  if (includeOpenCmd) return `open "${fullPath}"`;
+  return wrapInQuotes ? `"${fullPath}"` : fullPath;
+}
+
+function getPCPath(book: Book | null, localDirectory: string, osType?: 'win' | 'mac', wrapInQuotes: boolean = true, includeOpenCmd: boolean = true): string {
+  const targetOS = osType || (isMacSystem() ? 'mac' : 'win');
+  if (targetOS === 'mac') {
+    return getMacPath(book, localDirectory, wrapInQuotes, includeOpenCmd);
+  } else {
+    return getWinPath(book, localDirectory, wrapInQuotes);
+  }
+}
 import {
   subscribeBooksFromFirestore,
   saveBookToFirestore,
@@ -30,8 +104,6 @@ import { MasterManagementModal } from './components/MasterManagementModal';
 import { VBACodeModal } from './components/VBACodeModal';
 import { IssueListModal } from './components/IssueListModal';
 import { BackupFolderModal } from './components/BackupFolderModal';
-import { GoogleSheetModal } from './components/GoogleSheetModal';
-import { StatisticalAnalysisModal } from './components/StatisticalAnalysisModal';
 import { LoginModal } from './components/LoginModal';
 import { InstallAppModal } from './components/InstallAppModal';
 import { PDFExportModal } from './components/PDFExportModal';
@@ -39,16 +111,14 @@ import { ExcelImportModal } from './components/ExcelImportModal';
 import { CheckCircle2, Info, FileSpreadsheet, AlertTriangle, Trash2 } from 'lucide-react';
 
 export default function App() {
-  // Helper to sanitize any garbled UTF-8 strings and standardize creator name
+  // Helper to sanitize any garbled UTF-8 strings and standardize creator name:
+  // - Sr No 01 to 17 = Devdutt Thaker
+  // - Sr No 18 to 107 = Jignesh Upadhyay
+  // - Sr No 108 to 163 = Devdutt Thaker
   const sanitizeBook = (b: Book): Book => {
-    const rawCreatedBy = fixGarbledText(b.createdBy || '').trim();
-    const cleanCreatedBy = (!rawCreatedBy || rawCreatedBy === 'Admin' || rawCreatedBy.toLowerCase() === 'admin')
-      ? 'Devdutt Thaker'
-      : rawCreatedBy;
-
     return {
       ...b,
-      bookName: fixGarbledText(b.bookName || ''),
+      bookName: cleanBookTitle(b.bookName || ''),
       author: fixGarbledText(b.author || ''),
       category: fixGarbledText(b.category || ''),
       translator: fixGarbledText(b.translator || ''),
@@ -56,7 +126,7 @@ export default function App() {
       publisher: fixGarbledText(b.publisher || ''),
       bookType: fixGarbledText(b.bookType || ''),
       remarks1: fixGarbledText(b.remarks1 || ''),
-      createdBy: cleanCreatedBy,
+      createdBy: resolveBookCreatedBy(b.bookId, b.createdBy),
     };
   };
 
@@ -134,24 +204,6 @@ export default function App() {
     return saved || 'D:\\My Books\\My Books';
   });
 
-  // User Authentication & Role State
-  const [currentUser, setCurrentUser] = useState<AppUser>(() => {
-    const saved = localStorage.getItem('my_book_collection_user');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Error parsing user:', e);
-      }
-    }
-    return {
-      id: 'guest_user',
-      username: 'user',
-      name: 'User',
-      role: 'User',
-    };
-  });
-
   // Helper to preserve user roles assigned by Admin
   const sanitizeUserRole = (u: AppUser): AppUser => {
     if (!u) return u;
@@ -161,6 +213,25 @@ export default function App() {
     }
     return u;
   };
+
+  // User Authentication & Role State
+  const [currentUser, setCurrentUser] = useState<AppUser>(() => {
+    const saved = localStorage.getItem('my_book_collection_user');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return sanitizeUserRole(parsed);
+      } catch (e) {
+        console.error('Error parsing user:', e);
+      }
+    }
+    return {
+      id: 'admin_user',
+      username: 'admin',
+      name: 'Devdutt Thaker (Admin)',
+      role: 'Admin',
+    };
+  });
 
   const [allUsers, setAllUsers] = useState<AppUser[]>(() => {
     const saved = localStorage.getItem('my_book_collection_all_users');
@@ -198,7 +269,7 @@ export default function App() {
   };
 
   const handleToggleTheme = () => {
-    const themeCycle: Record<AppTheme, AppTheme> = {
+    const themeCycle: Partial<Record<AppTheme, AppTheme>> = {
       light: 'sepia',
       sepia: 'dark',
       dark: 'light',
@@ -228,22 +299,27 @@ export default function App() {
     }
   }, [currentUser, isEditing]);
 
-  // Quota exceeded notification state
+  // Quota exceeded notification state (remember dismissal for current session)
   const [quotaExceeded, setQuotaExceeded] = useState(false);
 
   useEffect(() => {
     setOnQuotaExceededListener(() => {
-      setQuotaExceeded(true);
+      if (sessionStorage.getItem('my_book_collection_dismiss_quota') !== 'true') {
+        setQuotaExceeded(true);
+      }
     });
   }, []);
+
+  const handleDismissQuota = () => {
+    sessionStorage.setItem('my_book_collection_dismiss_quota', 'true');
+    setQuotaExceeded(false);
+  };
 
   // Modal States
   const [isVBAModalOpen, setIsVBAModalOpen] = useState(false);
   const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
   const [isIssueListOpen, setIsIssueListOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
-  const [isGoogleSheetModalOpen, setIsGoogleSheetModalOpen] = useState(false);
-  const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [bookToDeleteId, setBookToDeleteId] = useState<string | null>(null);
   const [pdfModalOrientation, setPdfModalOrientation] = useState<'Landscape' | 'Portrait' | null>(null);
@@ -256,23 +332,9 @@ export default function App() {
     parsedBorrowers: BorrowerRecord[];
   } | null>(null);
 
-  // User Request: Clear entire database once to allow fresh import of new database
-  useEffect(() => {
-    const CLEARED_KEY = 'my_book_collection_cleared_for_user_fresh_import_v2026';
-    if (!localStorage.getItem(CLEARED_KEY)) {
-      localStorage.setItem(CLEARED_KEY, 'true');
-      localStorage.setItem('my_book_collection_is_cleared', 'true');
-      localStorage.removeItem(CURRENT_STORAGE_KEY);
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith('my_book_collection_user_books') || key.startsWith('my_book_collection_books'))) {
-          localStorage.removeItem(key);
-        }
-      }
-      setBooks([]);
-      clearAllBooksInFirestore().catch(console.error);
-    }
-  }, []);
+  // Clear Database Confirmation Dialog State
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [isClearingInProgress, setIsClearingInProgress] = useState(false);
 
   // Capture PWA beforeinstallprompt event on mobile and PC
   useEffect(() => {
@@ -360,8 +422,8 @@ export default function App() {
   // Real-time Firestore synchronization
   useEffect(() => {
     const unsubBooks = subscribeBooksFromFirestore((cloudBooks) => {
-      // If user has explicitly cleared the database and cloud has 0 books, maintain 0 books
-      if (localStorage.getItem('my_book_collection_is_cleared') === 'true' && (!cloudBooks || cloudBooks.length === 0)) {
+      // If user has explicitly cleared the database, maintain 0 books until user imports or adds new books
+      if (localStorage.getItem('my_book_collection_is_cleared') === 'true') {
         setBooks([]);
         return;
       }
@@ -372,17 +434,23 @@ export default function App() {
       if (Array.isArray(cloudBooks) && cloudBooks.length > 0) {
         localStorage.removeItem('my_book_collection_is_cleared');
         const bookMap = new Map<string, Book>();
+
         localBooks.forEach((b) => {
-          if (b && b.bookId) bookMap.set(String(b.bookId), sanitizeBook(b));
+          if (b && b.bookId) {
+            bookMap.set(String(b.bookId), sanitizeBook(b));
+          }
         });
+
         cloudBooks.forEach((b) => {
-          if (b && b.bookId) bookMap.set(String(b.bookId), sanitizeBook(b));
+          if (b && b.bookId) {
+            bookMap.set(String(b.bookId), sanitizeBook(b));
+          }
         });
 
         merged = Array.from(bookMap.values());
         localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(merged));
       } else {
-        merged = localBooks;
+        merged = localBooks.map(sanitizeBook);
       }
 
       setBooks(sortBooksIndependently(merged));
@@ -552,7 +620,7 @@ export default function App() {
     const rawCreator = formData.createdBy?.trim() || currentUser?.name || 'Devdutt Thaker';
     const recordToSave: Book = {
       ...formData,
-      createdBy: (rawCreator === 'Admin' || rawCreator.toLowerCase() === 'admin') ? 'Devdutt Thaker' : rawCreator,
+      createdBy: resolveBookCreatedBy(formData.bookId, rawCreator, currentUser?.name),
     };
 
     // Auto-add newly entered master options (e.g. Author, Category, Publisher, Language, Translator, BookType)
@@ -579,7 +647,7 @@ export default function App() {
     if (masterChanged) {
       setMasters(newMasters);
       localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(newMasters));
-      saveMasterDataToFirestore(newMasters).catch((err) => console.error('Firestore save masters error:', err));
+      saveMasterDataToFirestore(newMasters).catch((err) => console.warn('Firestore save masters error:', err));
     }
 
     let updatedBooks: Book[] = [];
@@ -596,7 +664,7 @@ export default function App() {
     }
 
     // Save book to Firestore collection
-    saveBookToFirestore(recordToSave).catch((err) => console.error('Firestore save book error:', err));
+    saveBookToFirestore(recordToSave).catch((err) => console.warn('Firestore save book error:', err));
 
     // Perform independent sorting on Column A and Column D as per specification
     const sorted = sortBooksIndependently(updatedBooks);
@@ -611,7 +679,10 @@ export default function App() {
 
   // 3. Select Book from ListBox1
   const handleSelectBook = (book: Book, shouldScrollToForm = false) => {
-    setFormData({ ...book });
+    setFormData({
+      ...book,
+      createdBy: resolveBookCreatedBy(book.bookId, book.createdBy),
+    });
     setIsEditing(true);
     setSelectedBookForIssue(book);
     if (shouldScrollToForm) {
@@ -655,7 +726,7 @@ export default function App() {
     const targetId = bookToDeleteId;
     const remaining = books.filter((b) => b.bookId !== targetId);
     setBooks(remaining);
-    deleteBookFromFirestore(targetId).catch((err) => console.error('Firestore delete book error:', err));
+    deleteBookFromFirestore(targetId).catch((err) => console.warn('Firestore delete book error:', err));
     handleReset(remaining);
     showToast(`🗑️ Book ID #${targetId} સફળતાપૂર્વક ડિલીટ કરવામાં આવ્યું.`);
     setBookToDeleteId(null);
@@ -780,7 +851,7 @@ export default function App() {
           restoredBooksCount = sorted.length;
           localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(sorted));
           // Save all restored books to Firestore database immediately
-          bulkSaveBooksToFirestore(sorted).catch((err) => console.error('Firestore bulkSave error:', err));
+          bulkSaveBooksToFirestore(sorted).catch((err) => console.warn('Firestore bulkSave error:', err));
         }
 
         // 2. Restore Masters
@@ -796,7 +867,7 @@ export default function App() {
           };
           setMasters(updatedMasters);
           localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updatedMasters));
-          saveMasterDataToFirestore(updatedMasters).catch((err) => console.error('Firestore save masters error:', err));
+          saveMasterDataToFirestore(updatedMasters).catch((err) => console.warn('Firestore save masters error:', err));
           restoredMastersMsg = `, Masters`;
         }
 
@@ -832,7 +903,7 @@ export default function App() {
     }
     const cleanDefault = SAMPLE_BOOKS.map(sanitizeBook);
     setBooks(cleanDefault);
-    bulkSaveBooksToFirestore(cleanDefault).catch((err) => console.error('Firestore bulk save sample books:', err));
+    bulkSaveBooksToFirestore(cleanDefault).catch((err) => console.warn('Firestore bulk save sample books:', err));
     showToast(`૧૦૦ નમૂનાના સાહિત્યિક પુસ્તકો લોડ થયા છે (${cleanDefault.length} Sample Books)`);
   };
 
@@ -875,7 +946,7 @@ export default function App() {
     try {
       await issueBookInFirestore(newRecord);
     } catch (err) {
-      console.error('Firestore issueBook error:', err);
+      console.warn('Firestore issueBook error:', err);
     }
 
     showToast(`Book #${borrowerData.bookId} issued to ${borrowerData.borrowerName} (${issueId})`);
@@ -910,7 +981,7 @@ export default function App() {
     try {
       await returnBookInFirestore(issueId, targetBorrower?.bookId);
     } catch (err) {
-      console.error('Firestore returnBook error:', err);
+      console.warn('Firestore returnBook error:', err);
     }
 
     showToast(`Book return recorded for Issue ID #${issueId}`);
@@ -955,7 +1026,7 @@ export default function App() {
     try {
       await deleteBorrowerInFirestore(issueId, bookId, wasIssued);
     } catch (err) {
-      console.error('Firestore deleteBorrower error:', err);
+      console.warn('Firestore deleteBorrower error:', err);
     }
 
     showToast(`🗑️ Issue એન્ટ્રી #${issueId} (${targetBorrower.borrowerName}) ડિલીટ થઈ ગઈ છે.`);
@@ -996,7 +1067,7 @@ export default function App() {
     if (changed) {
       setMasters(newMasters);
       localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(newMasters));
-      saveMasterDataToFirestore(newMasters).catch((err) => console.error('Firestore save masters error:', err));
+      saveMasterDataToFirestore(newMasters).catch((err) => console.warn('Firestore save masters error:', err));
     }
   };
 
@@ -1015,7 +1086,7 @@ export default function App() {
     const sorted = sortBooksIndependently(sanitizedBooks);
     setBooks(sorted);
     localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(sorted));
-    bulkSaveBooksToFirestore(sorted).catch((err) => console.error('Firestore import Excel error:', err));
+    bulkSaveBooksToFirestore(sorted).catch((err) => console.warn('Firestore import Excel error:', err));
     syncMastersFromNewBooks(sorted);
 
     if (importedBorrowers && importedBorrowers.length > 0) {
@@ -1054,7 +1125,7 @@ export default function App() {
     localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(sorted));
 
     // Save only the newly appended books to Firestore
-    bulkSaveBooksToFirestore(newBooksFormatted).catch((err) => console.error('Firestore append Excel error:', err));
+    bulkSaveBooksToFirestore(newBooksFormatted).catch((err) => console.warn('Firestore append Excel error:', err));
     syncMastersFromNewBooks(newBooksFormatted);
 
     if (importedBorrowers && importedBorrowers.length > 0) {
@@ -1134,7 +1205,7 @@ export default function App() {
         if (parsed.borrowers.length > 0) {
           setBorrowers(parsed.borrowers);
         }
-        bulkSaveBooksToFirestore(sorted).catch((err) => console.error('Firestore sync Google Sheet error:', err));
+        bulkSaveBooksToFirestore(sorted).catch((err) => console.warn('Firestore sync Google Sheet error:', err));
         showToast(`ગૂગલ શીટમાંથી કુલ ${parsed.books.length} પુસ્તકો સફળતાપૂર્વક લોડ થઈ ગયા!`);
       } else {
         alert('Google Sheet માં કોઈ પુસ્તક રેકોર્ડ મળ્યા નથી. કૃપા કરીને કોલમ ચેક કરો.');
@@ -1144,12 +1215,22 @@ export default function App() {
     }
   };
 
-  const handleClearAllBooks = async () => {
+  const handleClearAllBooks = () => {
     if (currentUser?.role !== 'Admin') {
-      alert('⚠️ મનાઈ (Permission Denied): ડેટા ક્લિયર કરવા ફક્ત Admin ને એક્સેસ છે.');
+      showToast('⚠️ મનાઈ (Permission Denied): ડેટાબેઝ ક્લિયર કરવાની પરવાનગી ફક્ત Admin પાસે જ છે.');
       return;
     }
-    if (confirm('⚠️ શું તમે લાઈબ્રેરીનો તમામ ડેટા સાફ (Clear All Database) કરવા માંગો છો?\n\nઆનાથી બધા પુસ્તકો હટી જશે અને લાઈબ્રેરી 0 પુસ્તકો સાથે નવી Excel ફાઈલ ઈમ્પોર્ટ કરવા માટે તૈયાર થઈ જશે.')) {
+    setIsClearConfirmOpen(true);
+  };
+
+  const handleExecuteClearDatabase = async () => {
+    if (currentUser?.role !== 'Admin') {
+      showToast('⚠️ મનાઈ (Permission Denied): ડેટાબેઝ ક્લિયર કરવાની પરવાનગી ફક્ત Admin પાસે જ છે.');
+      setIsClearConfirmOpen(false);
+      return;
+    }
+    setIsClearingInProgress(true);
+    try {
       localStorage.setItem('my_book_collection_is_cleared', 'true');
       localStorage.removeItem(CURRENT_STORAGE_KEY);
       for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -1160,8 +1241,15 @@ export default function App() {
       }
       setBooks([]);
       handleReset([]);
+      showToast('🗑️ તમામ પુસ્તકો સાફ થઈ રહ્યા છે...');
       await clearAllBooksInFirestore(books);
-      showToast('🗑️ તમામ પુસ્તકો સાફ થઈ ગયા છે (કુલ પુસ્તકો: 0). હવે તમે "IMPORT .XLSX" થી તમારો નવો ડેટાબેઝ ઈમ્પોર્ટ કરી શકો છો.');
+      showToast('✅ લાઈબ્રેરીનો તમામ ડેટા સાફ થઈ ગયો છે (કુલ પુસ્તકો: 0). હવે તમે નવી Excel ફાઈલ આસાનીથી ઈમ્પોર્ટ કરી શકો છો.');
+    } catch (err) {
+      console.warn('Clear database error:', err);
+      showToast('⚠️ ડેટા સાફ કરવામાં મુશ્કેલી આવી.');
+    } finally {
+      setIsClearingInProgress(false);
+      setIsClearConfirmOpen(false);
     }
   };
 
@@ -1202,7 +1290,7 @@ export default function App() {
             </div>
           </div>
           <button
-            onClick={() => setQuotaExceeded(false)}
+            onClick={handleDismissQuota}
             className="text-amber-300 hover:text-white font-bold px-3 py-1.5 rounded bg-amber-900/80 border border-amber-500/60 cursor-pointer text-xs shrink-0 shadow"
           >
             સમજાઈ ગયું ✕
@@ -1227,11 +1315,9 @@ export default function App() {
         onImportExcel={handleImportExcel}
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
-        onSyncGoogleSheet={() => setIsGoogleSheetModalOpen(true)}
         onResetCatalog={handleRestoreDefaultBooks}
         onClearAll={handleClearAllBooks}
         onOpenBackups={handleOpenBackups}
-        onOpenStats={() => setIsStatsModalOpen(true)}
         onOpenInstallModal={() => setIsInstallModalOpen(true)}
         localDirectory={localDirectory}
         totalBooksCount={books.length}
@@ -1352,7 +1438,7 @@ export default function App() {
           return saveRes;
         }}
         onDeleteUser={(du) => {
-          deleteUserFromFirestore(du.id, du.username).catch((err) => console.error('Firestore delete user error:', err));
+          deleteUserFromFirestore(du.id, du.username).catch((err) => console.warn('Firestore delete user error:', err));
           setAllUsers((prev) => {
             const duId = (du.id || '').trim().toLowerCase();
             const duUsername = (du.username || du.id || '').trim().toLowerCase();
@@ -1368,7 +1454,7 @@ export default function App() {
         }}
         onUpdateUserRole={(rawUser) => {
           const uu = sanitizeUserRole(rawUser);
-          saveUserToFirestore(uu).catch((err) => console.error('Firestore update user role error:', err));
+          saveUserToFirestore(uu).catch((err) => console.warn('Firestore update user role error:', err));
           setAllUsers((prev) => {
             const updated = prev.map((u) =>
               u.id.toLowerCase() === uu.id.toLowerCase() ||
@@ -1408,34 +1494,7 @@ export default function App() {
         onClearDatabase={handleClearAllBooks}
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
-        onRestoreDefaultBooks={handleRestoreDefaultBooks}
-      />
-
-      <GoogleSheetModal
-        isOpen={isGoogleSheetModalOpen}
-        onClose={() => setIsGoogleSheetModalOpen(false)}
-        onSuccess={(newBooks, newBorrowers, mode) => {
-          if (mode === 'replace') {
-            setBooks(sortBooksIndependently(newBooks));
-          } else {
-            // Append mode: avoid duplicate bookId
-            const existingIds = new Set(books.map((b) => b.bookId));
-            const filteredNew = newBooks.filter((b) => !existingIds.has(b.bookId));
-            setBooks(sortBooksIndependently([...books, ...filteredNew]));
-          }
-          if (newBorrowers.length > 0) {
-            setBorrowers(newBorrowers);
-          }
-          setSearchValue(''); // Clear search filter so imported books appear immediately
-        }}
-        showToast={showToast}
-      />
-
-      <StatisticalAnalysisModal
-        isOpen={isStatsModalOpen}
-        onClose={() => setIsStatsModalOpen(false)}
-        books={books}
-        borrowers={borrowers}
+        currentUser={currentUser}
       />
 
       <LoginModal
@@ -1477,7 +1536,7 @@ export default function App() {
           return saveRes;
         }}
         onDeleteUser={(du) => {
-          deleteUserFromFirestore(du.id, du.username).catch((err) => console.error('Firestore delete user error:', err));
+          deleteUserFromFirestore(du.id, du.username).catch((err) => console.warn('Firestore delete user error:', err));
           setAllUsers((prev) => {
             const duId = (du.id || '').trim().toLowerCase();
             const duUsername = (du.username || du.id || '').trim().toLowerCase();
@@ -1493,7 +1552,7 @@ export default function App() {
         }}
         onUpdateUserRole={(rawUser) => {
           const uu = sanitizeUserRole(rawUser);
-          saveUserToFirestore(uu).catch((err) => console.error('Firestore update user role error:', err));
+          saveUserToFirestore(uu).catch((err) => console.warn('Firestore update user role error:', err));
           setAllUsers((prev) => {
             const updated = prev.map((u) =>
               u.id.toLowerCase() === uu.id.toLowerCase() ||
@@ -1585,6 +1644,57 @@ export default function App() {
           onAppend={() => handleExecuteAppendImport(pendingExcelData.parsedBooks, pendingExcelData.parsedBorrowers, pendingExcelData.fileName)}
           onReplace={() => handleExecuteReplaceImport(pendingExcelData.parsedBooks, pendingExcelData.parsedBorrowers, pendingExcelData.fileName)}
         />
+      )}
+
+      {/* Clear All Database Confirmation Dialog (Iframe & Mobile Safe) */}
+      {isClearConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl">
+            <div className="w-14 h-14 rounded-full bg-rose-950/80 border border-rose-500/50 flex items-center justify-center mx-auto text-rose-400 shadow-lg shadow-rose-900/30">
+              <Trash2 className="w-7 h-7" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-white">લાઈબ્રેરીનો તમામ ડેટા સાફ કરવો છે?</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                શું આપ ખરેખર લાઈબ્રેરીમાંથી હાજર તમામ <span className="font-bold text-amber-400 font-mono text-sm">{books.length}</span> પુસ્તકો હટાવવા માંગો છો?
+              </p>
+              <div className="p-3 bg-rose-950/30 border border-rose-800/40 rounded-xl text-left text-xs text-rose-200/90 space-y-1">
+                <p className="font-semibold text-rose-300 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  મહત્વની સૂચના:
+                </p>
+                <p>
+                  આનાથી લાઈબ્રેરી સાફ થઈને 0 પુસ્તકો થઈ જશે, જેથી તમે તમારી સાચી Excel ફાઈલ આસાનીથી અપલોડ કરી શકશો.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isClearingInProgress}
+                onClick={() => setIsClearConfirmOpen(false)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                રદ કરો (Cancel)
+              </button>
+              <button
+                type="button"
+                disabled={isClearingInProgress}
+                onClick={handleExecuteClearDatabase}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/30 cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isClearingInProgress ? (
+                  <span>સાફ થઈ રહ્યું છે...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>હા, બધો ડેટા સાફ કરો</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Book, SearchCriterion } from '../types';
+import { resolveBookCreatedBy } from '../initialData';
 import { Search, Monitor, Apple, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Maximize2, Minimize2, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw, ListFilter, Trash2 } from 'lucide-react';
 
 type SortField = 'Book ID' | 'Book Name' | 'Author' | 'Category' | 'Language' | 'Book Type' | 'Entry By';
@@ -106,7 +107,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
           fieldValue = book.bookType || '';
           break;
         case 'Entry By':
-          fieldValue = book.createdBy || '';
+          fieldValue = resolveBookCreatedBy(book.bookId, book.createdBy);
           break;
         default:
           fieldValue = book.bookName;
@@ -146,8 +147,8 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
         valA = a.bookType || '';
         valB = b.bookType || '';
       } else if (sortField === 'Entry By') {
-        valA = (a.createdBy && a.createdBy.toLowerCase() !== 'admin') ? a.createdBy : 'Devdutt Thaker';
-        valB = (b.createdBy && b.createdBy.toLowerCase() !== 'admin') ? b.createdBy : 'Devdutt Thaker';
+        valA = resolveBookCreatedBy(a.bookId, a.createdBy);
+        valB = resolveBookCreatedBy(b.bookId, b.createdBy);
       }
 
       const comp = valA.localeCompare(valB, 'gu', { numeric: true, sensitivity: 'base' });
@@ -195,7 +196,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
       else if (searchCriterion === 'Category') val = b.category;
       else if (searchCriterion === 'Language') val = b.language;
       else if (searchCriterion === 'Book Type') val = b.bookType || '';
-      else if (searchCriterion === 'Entry By') val = (b.createdBy && b.createdBy.toLowerCase() !== 'admin') ? b.createdBy : 'Devdutt Thaker';
+      else if (searchCriterion === 'Entry By') val = resolveBookCreatedBy(b.bookId, b.createdBy);
       else val = b.bookName;
 
       if (val && val.toLowerCase().includes(searchValue.toLowerCase())) {
@@ -499,7 +500,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
                       {book.bookType || 'Digital PDF'}
                     </td>
                     <td className={`px-2 py-2 font-sans text-xs truncate ${isSelected ? 'text-white' : 'opacity-90'}`}>
-                      {(book.createdBy && book.createdBy.toLowerCase() !== 'admin') ? book.createdBy : 'Devdutt Thaker'}
+                      {resolveBookCreatedBy(book.bookId, book.createdBy)}
                     </td>
                     {isAdmin && (
                       <td

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Book, AppTheme } from '../types';
+import { resolveBookCreatedBy } from '../initialData';
 import { FileText, Users, User, X, Printer, Sparkles } from 'lucide-react';
 import { openCatalogPrintView } from '../utils/pdfExport';
 
@@ -31,10 +32,7 @@ export const PDFExportModal: React.FC<PDFExportModalProps> = ({
   const userStats = useMemo(() => {
     const map = new Map<string, number>();
     for (const b of books) {
-      let u = (b.createdBy || '').trim();
-      if (!u || u.toLowerCase() === 'admin') {
-        u = 'Devdutt Thaker';
-      }
+      let u = resolveBookCreatedBy(b.bookId, b.createdBy);
       map.set(u, (map.get(u) || 0) + 1);
     }
     const list = Array.from(map.entries()).map(([name, count]) => ({

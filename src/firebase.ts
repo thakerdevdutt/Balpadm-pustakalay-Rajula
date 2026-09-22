@@ -2,6 +2,8 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getFirestore, 
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection, 
   doc, 
   setDoc, 
@@ -16,16 +18,29 @@ import { Book, MasterData, BorrowerRecord, AppUser } from './types';
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore with ignoreUndefinedProperties enabled
+// Initialize Firestore with persistent IndexedDB local cache and multi-tab sync
+// This dramatically reduces read quota consumption on page refresh/reload
 let firestoreDb;
 try {
+  const cacheSettings = {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    }),
+    ignoreUndefinedProperties: true
+  };
   firestoreDb = firebaseConfig.firestoreDatabaseId 
-    ? initializeFirestore(app, { ignoreUndefinedProperties: true }, firebaseConfig.firestoreDatabaseId)
-    : initializeFirestore(app, { ignoreUndefinedProperties: true });
+    ? initializeFirestore(app, cacheSettings, firebaseConfig.firestoreDatabaseId)
+    : initializeFirestore(app, cacheSettings);
 } catch (e) {
-  firestoreDb = firebaseConfig.firestoreDatabaseId 
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
+  try {
+    firestoreDb = firebaseConfig.firestoreDatabaseId 
+      ? initializeFirestore(app, { ignoreUndefinedProperties: true }, firebaseConfig.firestoreDatabaseId)
+      : initializeFirestore(app, { ignoreUndefinedProperties: true });
+  } catch (err) {
+    firestoreDb = firebaseConfig.firestoreDatabaseId 
+      ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+      : getFirestore(app);
+  }
 }
 
 export const db = firestoreDb;
@@ -89,7 +104,11 @@ export const subscribeBooksFromFirestore = (
     });
     onUpdate(booksList);
   }, (err) => {
-    console.error('Firestore Books subscription error:', err);
+    if (isQuotaError(err)) {
+      console.warn('Firestore Books subscription paused (quota exceeded):', err?.message || err);
+    } else {
+      console.warn('Firestore Books subscription notice:', err);
+    }
     notifyQuotaExceeded(err);
     if (onError) onError(err);
   });
@@ -166,7 +185,11 @@ export const subscribeMasterDataFromFirestore = (
       onUpdate(snapshot.data() as MasterData);
     }
   }, (err) => {
-    console.error('Firestore MasterData subscription error:', err);
+    if (isQuotaError(err)) {
+      console.warn('Firestore MasterData subscription paused (quota exceeded):', err?.message || err);
+    } else {
+      console.warn('Firestore MasterData subscription notice:', err);
+    }
     notifyQuotaExceeded(err);
     if (onError) onError(err);
   });
@@ -201,7 +224,11 @@ export const subscribeBorrowersFromFirestore = (
     });
     onUpdate(list);
   }, (err) => {
-    console.error('Firestore Borrowers subscription error:', err);
+    if (isQuotaError(err)) {
+      console.warn('Firestore Borrowers subscription paused (quota exceeded):', err?.message || err);
+    } else {
+      console.warn('Firestore Borrowers subscription notice:', err);
+    }
     notifyQuotaExceeded(err);
     if (onError) onError(err);
   });
@@ -333,7 +360,11 @@ export const subscribeUsersFromFirestore = (
     });
     onUpdate(list);
   }, (err) => {
-    console.error('Firestore Users subscription error:', err);
+    if (isQuotaError(err)) {
+      console.warn('Firestore Users subscription paused (quota exceeded):', err?.message || err);
+    } else {
+      console.warn('Firestore Users subscription notice:', err);
+    }
     notifyQuotaExceeded(err);
     if (onError) onError(err);
   });
@@ -399,7 +430,7 @@ export const deleteUserFromFirestore = async (userId: string, username?: string)
       }
     });
   } catch (err) {
-    console.error('Error deleting user from Firestore:', err);
+    console.warn('Error deleting user from Firestore notice:', err);
   }
 };
 

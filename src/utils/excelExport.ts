@@ -13,6 +13,22 @@ export function cleanCellString(str: any): string {
 }
 
 /**
+ * Cleans the book title by removing leading sequence numbers or numbering prefixes,
+ * such as "98 - સફર" -> "સફર", "99 - સ્મરણ રેખા" -> "સ્મરણ રેખા", "100. પૃથ્વી વલ્લભ" -> "પૃથ્વી વલ્લભ",
+ * while strictly preserving all actual book name characters (including any numbers that might belong to the title like ભાગ ૧).
+ */
+export function cleanBookTitle(name: string): string {
+  if (!name) return '';
+  let cleaned = fixGarbledText(name).trim();
+
+  // Strip leading English or Gujarati digits followed by delimiter (dash, dot, colon, slash, space)
+  // e.g., "98 - ", "98-", "98. ", "98: ", "૧૦૦ - "
+  cleaned = cleaned.replace(/^[0-9\u0AE6-\u0AEF]+(?:\s*[-–—.:/)]+\s*|\s+)/, '');
+
+  return cleaned.trim();
+}
+
+/**
  * Fixes garbled text caused by UTF-8 bytes being interpreted as Latin1/CP1252 (Mojibake).
  * If the string already contains valid Gujarati characters (U+0A80 to U+0AFF), it is returned untouched.
  */
@@ -314,7 +330,7 @@ export function parseWorkbook(workbook: XLSX.WorkBook): { books: Book[]; borrowe
         if (!valNameRaw && !valIdRaw) continue;
 
         const bId = valIdRaw ? fixGarbledText(valIdRaw) : String(autoId);
-        const bTitle = valNameRaw ? fixGarbledText(valNameRaw) : `Book #${bId}`;
+        const bTitle = valNameRaw ? cleanBookTitle(valNameRaw) : `Book #${bId}`;
 
         autoId++;
 
