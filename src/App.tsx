@@ -226,10 +226,10 @@ export default function App() {
       }
     }
     return {
-      id: 'admin_user',
-      username: 'admin',
-      name: 'Devdutt Thaker (Admin)',
-      role: 'Admin',
+      id: 'guest_user',
+      username: 'guest',
+      name: 'Guest User',
+      role: 'User',
     };
   });
 
@@ -245,10 +245,7 @@ export default function App() {
     }
     return [];
   });
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(() => {
-    const saved = localStorage.getItem('my_book_collection_user');
-    return !saved; // Open Login Modal automatically on any new PC or browser session!
-  });
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
 
   // UI state
   const [languageMode, setLanguageMode] = useState<'en' | 'gu' | 'both'>('both');
@@ -580,6 +577,10 @@ export default function App() {
     });
     setIsEditing(false);
     setSelectedBookForIssue(null);
+
+    // Reset search criterion and search filter input in Frame 2
+    setSearchValue('');
+    setSearchCriterion('Author');
 
     // Set focus back to txt_BookName as required by specs
     setTimeout(() => {
@@ -1358,6 +1359,8 @@ export default function App() {
           onMaster={handleMaster}
           isEditing={isEditing}
           canExport={currentUser?.role === 'Admin' || currentUser?.role === 'Super User'}
+          canSave={currentUser?.role === 'Admin' || currentUser?.role === 'Super User'}
+          canManageMaster={currentUser?.role === 'Admin'}
         />
 
         {/* FRAME 2: Search & List Window */}
@@ -1387,6 +1390,7 @@ export default function App() {
           onOpenIssueList={() => setIsIssueListOpen(true)}
           languageMode={languageMode}
           totalIssuedCount={borrowers.filter((b) => b.status === 'Issued').length}
+          canIssue={currentUser?.role === 'Admin' || currentUser?.role === 'Super User'}
         />
 
       </main>

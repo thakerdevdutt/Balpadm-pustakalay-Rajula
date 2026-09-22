@@ -12,6 +12,8 @@ interface ActionButtonsProps {
   onMaster: () => void;
   isEditing: boolean;
   canExport?: boolean;
+  canSave?: boolean;
+  canManageMaster?: boolean;
 }
 
 export const ActionButtons: React.FC<ActionButtonsProps> = ({
@@ -25,6 +27,8 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
   onMaster,
   isEditing,
   canExport = true,
+  canSave = true,
+  canManageMaster = true,
 }) => {
   return (
     <div
@@ -34,11 +38,16 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       {/* 1. BTN_Save_Update_Click - Emerald Green */}
       <button
         id="BTN_Save_Update_Click"
-        onClick={onSaveUpdate}
-        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded shadow-md text-xs uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 border border-emerald-500/50"
-        title="Save or update record in Database"
+        onClick={canSave ? onSaveUpdate : undefined}
+        disabled={!canSave}
+        className={`w-full font-bold py-2.5 px-3 rounded shadow-md text-xs uppercase transition-all flex items-center justify-center gap-1.5 ${
+          canSave
+            ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95 border border-emerald-500/50'
+            : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 cursor-not-allowed opacity-55 shadow-none'
+        }`}
+        title={canSave ? 'Save or update record in Database' : 'માત્ર Admin અને Super User ઉમેરી શકે (Guest/User માટે માત્ર જોવાની સુવિધા છે)'}
       >
-        <Save className="w-4 h-4 shrink-0" />
+        {canSave ? <Save className="w-4 h-4 shrink-0" /> : <Lock className="w-3.5 h-3.5 shrink-0 text-slate-400" />}
         <span className="truncate">{isEditing ? 'Update Record' : 'Save / Update'}</span>
       </button>
 
@@ -118,11 +127,16 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       {/* 6. BTN_Master - Purple / Magenta */}
       <button
         id="BTN_Master"
-        onClick={onMaster}
-        className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-3 rounded shadow-md text-xs uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 border border-purple-500/50"
-        title="Open Master list management utilities"
+        onClick={canManageMaster ? onMaster : undefined}
+        disabled={!canManageMaster}
+        className={`w-full font-bold py-2.5 px-3 rounded shadow-md text-xs uppercase transition-all flex items-center justify-center gap-1.5 ${
+          canManageMaster
+            ? 'bg-purple-600 hover:bg-purple-500 text-white cursor-pointer active:scale-95 border border-purple-500/50'
+            : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 cursor-not-allowed opacity-55 shadow-none'
+        }`}
+        title={canManageMaster ? 'Open Master list management utilities' : 'માત્ર Admin માટે ઉપલબ્ધ છે'}
       >
-        <SlidersHorizontal className="w-4 h-4 shrink-0" />
+        {canManageMaster ? <SlidersHorizontal className="w-4 h-4 shrink-0" /> : <Lock className="w-3.5 h-3.5 shrink-0 text-slate-400" />}
         <span className="truncate">Master</span>
       </button>
     </div>

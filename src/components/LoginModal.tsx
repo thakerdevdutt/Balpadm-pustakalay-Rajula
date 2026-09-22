@@ -314,20 +314,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <Users className={`w-4 h-4 ${isLight ? 'text-blue-600' : isSepia ? 'text-[#7c502b]' : 'text-blue-400'}`} />
                 <span>1. Select Registered Account:</span>
               </label>
-              <button
-                type="button"
-                onClick={() => setShowAddUserForm(!showAddUserForm)}
-                className={`text-xs font-bold flex items-center gap-1 px-2.5 py-1 rounded border cursor-pointer transition-colors ${
-                  isLight
-                    ? 'text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border-blue-300'
-                    : isSepia
-                    ? 'text-[#7c502b] hover:text-[#3d2b1f] bg-[#ede1cc] hover:bg-[#dfd0b8] border-[#dfd0b8]'
-                    : 'text-blue-300 hover:text-white bg-blue-950 hover:bg-blue-900 border-blue-500/60'
-                }`}
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>+ Add New User</span>
-              </button>
+              {Boolean(currentUser && currentUser.id !== 'guest_user' && currentUser.role === 'Admin') && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserForm(!showAddUserForm)}
+                  className={`text-xs font-bold flex items-center gap-1 px-2.5 py-1 rounded border cursor-pointer transition-colors ${
+                    isLight
+                      ? 'text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border-blue-300'
+                      : isSepia
+                      ? 'text-[#7c502b] hover:text-[#3d2b1f] bg-[#ede1cc] hover:bg-[#dfd0b8] border-[#dfd0b8]'
+                      : 'text-blue-300 hover:text-white bg-blue-950 hover:bg-blue-900 border-blue-500/60'
+                  }`}
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ Add New User</span>
+                </button>
+              )}
             </div>
 
             {(() => {
@@ -355,7 +357,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     }`}>
                       <Info className={`w-4 h-4 shrink-0 ${isLight ? 'text-blue-600' : isSepia ? 'text-[#7c502b]' : 'text-blue-400'}`} />
                       <span className={isLight ? 'text-slate-800' : isSepia ? 'text-[#3d2b1f]' : 'text-slate-100'}>
-                        ℹ️ નવા યુઝર માટે ડિફોલ્ટ <b className={isLight ? 'text-emerald-700 font-bold' : isSepia ? 'text-[#2e7d32] font-bold' : 'text-emerald-300 font-bold'}>User</b> રાઈટ્સ રહેશે. Super User કે Admin રાઈટ્સ આપવા માટે Admin (Devdutt Thaker) તરીકે લૉગિન કરો.
+                        પુસ્તકો ઉમેરવા/સુધારવા માટે અધિકૃત સંચાલક એકાઉન્ટ પસંદ કરી પાસવર્ડ દાખલ કરો.
                       </span>
                     </div>
                   )}
@@ -473,44 +475,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
-                      {isAdminActive && (
-                        <div
-                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${
-                            isLight
-                              ? 'bg-slate-100 border-slate-300 text-slate-800'
-                              : isSepia
-                              ? 'bg-[#ede1cc] border-[#dfd0b8] text-[#3d2b1f]'
-                              : 'bg-slate-900/90 border-slate-700 text-slate-200'
-                          }`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Key className={`w-2.5 h-2.5 ${isLight ? 'text-amber-600' : 'text-amber-400'}`} />
-                          <span className={`font-bold ${isLight ? 'text-slate-900' : isSepia ? 'text-[#3d2b1f]' : 'text-white'}`}>
-                            {showAdminRevealedPass[u.id || u.username]
-                              ? (u.password || (u.role === 'Admin' ? 'Malvee@0911' : '1234'))
-                              : '••••'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const key = u.id || u.username;
-                              setShowAdminRevealedPass((prev) => ({
-                                ...prev,
-                                [key]: !prev[key]
-                              }));
-                            }}
-                            className={`p-0.5 cursor-pointer ${isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'}`}
-                            title="Show/Hide Password"
-                          >
-                            {showAdminRevealedPass[u.id || u.username] ? (
-                              <EyeOff className="w-2.5 h-2.5" />
-                            ) : (
-                              <Eye className="w-2.5 h-2.5" />
-                            )}
-                          </button>
-                        </div>
-                      )}
-
                       {isSelected && (
                         <span className="text-[10px] font-bold text-white bg-blue-600 border border-blue-400 px-2 py-0.5 rounded shadow">
                           Selected
@@ -628,7 +592,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   </div>
 
                   {/* Admin Control: Change Rights of Selected User */}
-                  {currentUser && currentUser.role === 'Admin' && selectedUserObj.id !== 'admin' && (
+                  {Boolean(currentUser && currentUser.id !== 'guest_user' && currentUser.role === 'Admin') && selectedUserObj.id !== 'admin' && (
                     <div className={`mt-3 pt-2.5 border-t p-2.5 rounded-md space-y-2 ${
                       isLight
                         ? 'border-slate-300 bg-white/80'
@@ -670,43 +634,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                         </select>
                       </div>
 
-                      {/* Admin View & Quick Reset Password */}
-                      <div className={`flex items-center justify-between pt-2 border-t text-[11px] ${
+                      {/* Admin Quick Reset Password */}
+                      <div className={`flex items-center justify-end pt-2 border-t text-[11px] ${
                         isLight ? 'border-slate-200 text-slate-700' : isSepia ? 'border-[#dfd0b8] text-[#3d2b1f]' : 'border-slate-800 text-slate-300'
                       }`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`font-bold ${isLight ? 'text-amber-800' : isSepia ? 'text-[#78350f]' : 'text-amber-400'}`}>🔑 Current Password:</span>
-                          <span className={`font-mono px-2 py-0.5 rounded border font-bold ${
-                            isLight
-                              ? 'bg-white border-slate-300 text-slate-900'
-                              : isSepia
-                              ? 'bg-[#fffdf8] border-[#dfd0b8] text-[#3d2b1f]'
-                              : 'bg-slate-900 border-slate-700 text-white'
-                          }`}>
-                            {showAdminRevealedPass[selectedUserObj.id || selectedUserObj.username]
-                              ? (selectedUserObj.password || '1234')
-                              : '••••••••'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const key = selectedUserObj.id || selectedUserObj.username;
-                              setShowAdminRevealedPass((prev) => ({
-                                ...prev,
-                                [key]: !prev[key]
-                              }));
-                            }}
-                            className={`p-1 cursor-pointer ${isLight ? 'text-slate-500 hover:text-amber-800' : 'text-slate-400 hover:text-amber-300'}`}
-                            title="Show/Hide Password"
-                          >
-                            {showAdminRevealedPass[selectedUserObj.id || selectedUserObj.username] ? (
-                              <EyeOff className="w-3.5 h-3.5" />
-                            ) : (
-                              <Eye className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
-
                         <button
                           type="button"
                           onClick={() => {
@@ -714,11 +645,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                             setErrorMsg('');
                             setChangePassSuccessMsg('');
                           }}
-                          className={`text-[11px] font-bold underline cursor-pointer ${
+                          className={`text-[11px] font-bold underline cursor-pointer flex items-center gap-1 ${
                             isLight ? 'text-amber-800 hover:text-amber-950' : isSepia ? 'text-[#78350f] hover:text-[#523408]' : 'text-amber-400 hover:text-amber-300'
                           }`}
                         >
-                          ✏️ રીસેટ પાસવર્ડ
+                          <Key className="w-3 h-3" />
+                          <span>✏️ આ યુઝરનો પાસવર્ડ રીસેટ કરો</span>
                         </button>
                       </div>
                     </div>

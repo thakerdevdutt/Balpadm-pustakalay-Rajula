@@ -8,6 +8,7 @@ interface FrameBorrowerInfoProps {
   onOpenIssueList: () => void;
   languageMode: 'en' | 'gu' | 'both';
   totalIssuedCount: number;
+  canIssue?: boolean;
 }
 
 export const FrameBorrowerInfo: React.FC<FrameBorrowerInfoProps> = ({
@@ -16,6 +17,7 @@ export const FrameBorrowerInfo: React.FC<FrameBorrowerInfoProps> = ({
   onOpenIssueList,
   languageMode,
   totalIssuedCount,
+  canIssue = true,
 }) => {
   const [borrowerName, setBorrowerName] = useState('');
   const [address, setAddress] = useState('');
@@ -187,7 +189,13 @@ export const FrameBorrowerInfo: React.FC<FrameBorrowerInfoProps> = ({
         <div className="flex justify-end gap-2 mt-4 pt-2 border-t border-slate-700">
           <button
             type="submit"
-            className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 rounded text-xs font-bold uppercase transition-all cursor-pointer flex items-center gap-1.5"
+            disabled={!canIssue}
+            className={`px-4 py-1.5 rounded text-xs font-bold uppercase transition-all flex items-center gap-1.5 ${
+              canIssue
+                ? 'bg-blue-500 hover:bg-blue-600 cursor-pointer'
+                : 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+            }`}
+            title={canIssue ? 'Issue selected book' : 'પુસ્તક ઈશ્યુ કરવા સંચાલક તરીકે લૉગિન કરો'}
           >
             <UserCheck className="w-3.5 h-3.5" />
             <span>Issue Book</span>

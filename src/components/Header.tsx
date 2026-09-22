@@ -118,7 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center flex-wrap gap-2 w-full md:w-auto justify-start md:justify-end">
 
         {/* User Role Badge & Switch User */}
-        {currentUser ? (
+        {currentUser && currentUser.id !== 'guest_user' ? (
           <div
             onClick={onOpenLoginModal}
             className={`flex items-center gap-1.5 border rounded-lg p-1 px-2.5 cursor-pointer transition-colors ${
@@ -192,14 +192,21 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
         ) : (
-          <button
-            onClick={onOpenLoginModal}
-            className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer border border-blue-400 shadow"
-            title="Log in as Admin or User"
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>LOGIN</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[11px] px-2 py-1 rounded font-medium border hidden sm:inline-flex items-center gap-1 ${
+              isLight ? 'bg-slate-100 text-slate-600 border-slate-300' : isSepia ? 'bg-[#ede1cc] text-[#7c634e] border-[#dfd0b8]' : 'bg-slate-800 text-slate-300 border-slate-700'
+            }`}>
+              👀 Guest (View-Only)
+            </span>
+            <button
+              onClick={onOpenLoginModal}
+              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer border border-blue-400 shadow"
+              title="સંચાલક તરીકે લૉગિન કરો (Admin Login)"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>ADMIN LOGIN</span>
+            </button>
+          </div>
         )}
 
         {/* Theme (Light / Sepia / Dark) Toggle */}

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Book, SearchCriterion } from '../types';
 import { resolveBookCreatedBy } from '../initialData';
-import { Search, Monitor, Apple, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Maximize2, Minimize2, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw, ListFilter, Trash2 } from 'lucide-react';
+import { Search, Monitor, Apple, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Maximize2, Minimize2, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw, ListFilter, Trash2, ChevronDown, Check } from 'lucide-react';
 
 type SortField = 'Book ID' | 'Book Name' | 'Author' | 'Category' | 'Language' | 'Book Type' | 'Entry By';
 type SortDirection = 'asc' | 'desc';
@@ -48,13 +48,91 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
   const [sortField, setSortField] = useState<SortField>('Book ID');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
+  // Interactive suggestion dropdown state (matching Frame 1 Autocomplete)
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState<boolean>(false);
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState<number>(-1);
+  const searchDropdownRef = useRef<HTMLDivElement>(null);
+  const suggestionsListRef = useRef<HTMLUListElement>(null);
+
+  // Close search dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchDropdownRef.current &&
+        !searchDropdownRef.current.contains(event.target as Node) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(event.target as Node)
+      ) {
+        setIsSearchDropdownOpen(false);
+        setHighlightedSuggestionIndex(-1);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // When searchValue is reset (e.g. from RESET button), close dropdown and reset highlight
+  useEffect(() => {
+    if (!searchValue) {
+      setIsSearchDropdownOpen(false);
+      setHighlightedSuggestionIndex(-1);
+    }
+  }, [searchValue]);
+
+  // Scroll active suggestion into view when navigating with keyboard
+  useEffect(() => {
+    if (isSearchDropdownOpen && highlightedSuggestionIndex >= 0 && suggestionsListRef.current) {
+      const activeEl = suggestionsListRef.current.children[highlightedSuggestionIndex] as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [highlightedSuggestionIndex, isSearchDropdownOpen]);
+
   // KeyCode = 13 (Enter) handler on cmb_SearchValue as per specification
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) {
       return;
     }
+
+    if (isSearchDropdownOpen && filteredSearchSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightedSuggestionIndex((prev) =>
+          prev < filteredSearchSuggestions.length - 1 ? prev + 1 : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightedSuggestionIndex((prev) =>
+          prev > 0 ? prev - 1 : filteredSearchSuggestions.length - 1
+        );
+        return;
+      }
+      if ((e.key === 'Enter' || e.keyCode === 13) && highlightedSuggestionIndex >= 0) {
+        e.preventDefault();
+        const chosen = filteredSearchSuggestions[highlightedSuggestionIndex];
+        if (chosen) {
+          setSearchValue(chosen);
+        }
+        setIsSearchDropdownOpen(false);
+        setHighlightedSuggestionIndex(-1);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setIsSearchDropdownOpen(false);
+        setHighlightedSuggestionIndex(-1);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' || e.keyCode === 13) {
       e.preventDefault();
+      setIsSearchDropdownOpen(false);
       // Shift focus to BTN_Reset as explicitly specified
       const resetBtn = document.getElementById('BTN_Reset');
       if (resetBtn) {
@@ -185,9 +263,8 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
     }
   };
 
-  // Generate dynamic search suggestions dropdown
-  const searchSuggestions = useMemo(() => {
-    if (!searchValue) return [];
+  // All available unique values for the currently selected search criterion
+  const availableCriterionOptions = useMemo(() => {
     const setVals = new Set<string>();
     safeBooks.forEach((b) => {
       let val = '';
@@ -197,14 +274,26 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
       else if (searchCriterion === 'Language') val = b.language;
       else if (searchCriterion === 'Book Type') val = b.bookType || '';
       else if (searchCriterion === 'Entry By') val = resolveBookCreatedBy(b.bookId, b.createdBy);
-      else val = b.bookName;
+      else if (searchCriterion === 'Book ID') val = b.bookId;
+      else if (searchCriterion === 'Book Name') val = b.bookName;
 
-      if (val && val.toLowerCase().includes(searchValue.toLowerCase())) {
-        setVals.add(val);
+      if (val && val.trim()) {
+        setVals.add(val.trim());
       }
     });
-    return Array.from(setVals).slice(0, 10);
-  }, [safeBooks, searchCriterion, searchValue]);
+    return Array.from(setVals).sort((a, b) => a.localeCompare(b, 'gu'));
+  }, [safeBooks, searchCriterion]);
+
+  // Generate filtered suggestions based on typing
+  const filteredSearchSuggestions = useMemo(() => {
+    if (!searchValue.trim()) {
+      return availableCriterionOptions.slice(0, 30);
+    }
+    const query = searchValue.trim().toLowerCase();
+    return availableCriterionOptions
+      .filter((opt) => opt.toLowerCase().includes(query))
+      .slice(0, 30);
+  }, [availableCriterionOptions, searchValue]);
 
   return (
     <section
@@ -222,7 +311,11 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
           <select
             id="cmb_search"
             value={searchCriterion}
-            onChange={(e) => setSearchCriterion(e.target.value as SearchCriterion)}
+            onChange={(e) => {
+              setSearchCriterion(e.target.value as SearchCriterion);
+              setIsSearchDropdownOpen(false);
+              setHighlightedSuggestionIndex(-1);
+            }}
             className="bg-slate-900 border border-slate-700 px-2.5 py-1 rounded text-xs font-medium text-slate-100 outline-none focus:border-indigo-500 shrink-0 cursor-pointer"
           >
             <option value="All Fields">All Fields (બધાજ ફીલ્ડ્સ)</option>
@@ -237,32 +330,118 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
           </select>
 
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 z-10" />
             <input
               id="cmb_SearchValue"
               ref={searchInputRef}
               type="text"
-              list="search-suggestions"
               value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
+              onChange={(e) => {
+                setSearchValue(e.target.value);
+                setIsSearchDropdownOpen(true);
+                setHighlightedSuggestionIndex(-1);
+              }}
+              onFocus={() => {
+                if (availableCriterionOptions.length > 0) {
+                  setIsSearchDropdownOpen(true);
+                }
+              }}
+              onClick={() => {
+                if (availableCriterionOptions.length > 0) {
+                  setIsSearchDropdownOpen(true);
+                }
+              }}
               onKeyDown={handleKeyDown}
-              className="w-full bg-slate-900 border border-slate-700 pl-8 pr-7 py-1 rounded text-xs outline-none focus:border-indigo-500 text-slate-100 placeholder-slate-500"
+              autoComplete="off"
+              className="w-full bg-slate-900 border border-slate-700 pl-8 pr-12 py-1 rounded text-xs outline-none focus:border-indigo-500 text-slate-100 placeholder-slate-500"
               placeholder={`Search records by ${searchCriterion}...`}
             />
-            {searchValue && (
-              <button
-                onClick={() => setSearchValue('')}
-                className="absolute right-2 top-2 text-slate-400 hover:text-slate-200"
-                title="Clear Search"
+
+            <div className="absolute right-1.5 top-1.5 flex items-center gap-1 z-10">
+              {searchValue && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchValue('');
+                    setIsSearchDropdownOpen(false);
+                    setHighlightedSuggestionIndex(-1);
+                    if (searchInputRef.current) searchInputRef.current.focus();
+                  }}
+                  className="text-slate-400 hover:text-slate-200 text-xs px-1 leading-none cursor-pointer"
+                  title="Clear Search"
+                >
+                  ✕
+                </button>
+              )}
+              {availableCriterionOptions.length > 0 && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => {
+                    setIsSearchDropdownOpen((prev) => !prev);
+                    if (!isSearchDropdownOpen && searchInputRef.current) {
+                      searchInputRef.current.focus();
+                    }
+                  }}
+                  className="text-slate-400 hover:text-indigo-300 p-0.5 focus:outline-none cursor-pointer"
+                  title={`${searchCriterion} ની યાદી જુઓ`}
+                >
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                      isSearchDropdownOpen ? 'rotate-180 text-indigo-400' : ''
+                    }`}
+                  />
+                </button>
+              )}
+            </div>
+
+            {/* Custom Interactive Dropdown matching Frame 1 Autocomplete */}
+            {isSearchDropdownOpen && filteredSearchSuggestions.length > 0 && (
+              <div
+                ref={searchDropdownRef}
+                className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-slate-900 border border-slate-700 rounded-md shadow-2xl divide-y divide-slate-800 text-xs"
               >
-                ✕
-              </button>
+                <div className="px-2.5 py-1 bg-slate-950/80 text-[10px] font-semibold text-slate-400 border-b border-slate-800 flex justify-between items-center">
+                  <span>{searchCriterion} સજેશન ({filteredSearchSuggestions.length})</span>
+                  <span className="text-[9px] text-slate-400">↑↓ નેવિગેટ • Enter સિલેક્ટ</span>
+                </div>
+                <ul ref={suggestionsListRef} className="py-1">
+                  {filteredSearchSuggestions.map((option, idx) => {
+                    const isHighlighted = idx === highlightedSuggestionIndex;
+                    const isSelected = option.toLowerCase() === searchValue.trim().toLowerCase();
+
+                    return (
+                      <li
+                        key={`${option}-${idx}`}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setSearchValue(option);
+                          setIsSearchDropdownOpen(false);
+                          setHighlightedSuggestionIndex(-1);
+                        }}
+                        onMouseEnter={() => setHighlightedSuggestionIndex(idx)}
+                        className={`px-3 py-1.5 cursor-pointer flex items-center justify-between transition-colors ${
+                          isHighlighted
+                            ? 'bg-indigo-600 text-white font-medium'
+                            : isSelected
+                            ? 'bg-slate-800 text-indigo-300 font-medium'
+                            : 'text-slate-200 hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="truncate">{option}</span>
+                        {isSelected && (
+                          <Check
+                            className={`w-3.5 h-3.5 shrink-0 ${
+                              isHighlighted ? 'text-white' : 'text-indigo-400'
+                            }`}
+                          />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
-            <datalist id="search-suggestions">
-              {searchSuggestions.map((s, idx) => (
-                <option key={idx} value={s} />
-              ))}
-            </datalist>
           </div>
 
           <span id="lbl_TotalBooks" className="text-[10px] font-bold text-indigo-300 px-3 py-1 bg-slate-900 rounded-full border border-slate-700 uppercase shrink-0">
