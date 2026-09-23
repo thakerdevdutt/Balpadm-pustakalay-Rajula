@@ -16,6 +16,7 @@ interface HeaderProps {
   onOpenBackups: () => void;
   onOpenStats?: () => void;
   onOpenInstallModal?: () => void;
+  currentAppIcon?: string;
   isFirestoreConnected?: boolean;
   localDirectory?: string;
   totalBooksCount: number;
@@ -41,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBackups,
   onOpenStats,
   onOpenInstallModal,
+  currentAppIcon = '/favicon.svg',
   localDirectory = 'D:\\My Books\\My Books',
   totalBooksCount,
   currentUser,
@@ -75,8 +77,12 @@ export const Header: React.FC<HeaderProps> = ({
       }`}
     >
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-blue-600 flex items-center justify-center rounded shadow-inner font-bold text-lg text-white shrink-0">
-          <span className="font-bold text-xs">બપ</span>
+        <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden shadow-lg border border-slate-700/80 shrink-0">
+          <img
+            src={currentAppIcon || '/favicon.svg'}
+            alt="બાલપદ્મ પુસ્તકાલય"
+            className="w-full h-full object-cover"
+          />
         </div>
         <div>
           <h1 className="text-base sm:text-lg font-bold tracking-tight uppercase flex items-center flex-wrap gap-1.5">

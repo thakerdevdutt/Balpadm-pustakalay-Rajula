@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient: Dark Charcoal Matte -->
+    <linearGradient id="bgGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2c2f35"/>
+      <stop offset="50%" stop-color="#1f2227"/>
+      <stop offset="100%" stop-color="#141619"/>
+    </linearGradient>
+
+    <!-- Inner ambient glow -->
+    <radialGradient id="ambientGlow1" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#3d424b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#141619" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Warm Page Textures -->
+    <linearGradient id="pageTanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#d4b483"/>
+      <stop offset="20%" stop-color="#e8d5b5"/>
+      <stop offset="50%" stop-color="#f3e5cb"/>
+      <stop offset="80%" stop-color="#dfcaa6"/>
+      <stop offset="100%" stop-color="#c4a371"/>
+    </linearGradient>
+
+    <linearGradient id="pageAmberGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#c98a3c"/>
+      <stop offset="30%" stop-color="#e5aa58"/>
+      <stop offset="60%" stop-color="#f1be72"/>
+      <stop offset="100%" stop-color="#b67728"/>
+    </linearGradient>
+
+    <linearGradient id="pageCreamGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#baa080"/>
+      <stop offset="25%" stop-color="#f0e2ce"/>
+      <stop offset="50%" stop-color="#fbf4e8"/>
+      <stop offset="75%" stop-color="#edd9bf"/>
+      <stop offset="100%" stop-color="#a88d6c"/>
+    </linearGradient>
+
+    <linearGradient id="spineLeather1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8a5323"/>
+      <stop offset="40%" stop-color="#b8783d"/>
+      <stop offset="70%" stop-color="#cf8c4d"/>
+      <stop offset="100%" stop-color="#693b12"/>
+    </linearGradient>
+
+    <linearGradient id="spineSlate1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#55606d"/>
+      <stop offset="50%" stop-color="#808d9b"/>
+      <stop offset="100%" stop-color="#424c56"/>
+    </linearGradient>
+
+    <linearGradient id="coverDark1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1e2d2a"/>
+      <stop offset="100%" stop-color="#344944"/>
+    </linearGradient>
+
+    <filter id="softShadow1" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="-4" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="bookShadow" x="-30%" y="-20%" width="160%" height="140%">
+      <feDropShadow dx="-6" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+    
+    <!-- Clip path to keep books inside squircle -->
+    <clipPath id="squircleClip1">
+      <rect x="16" y="16" width="480" height="480" rx="108"/>
+    </clipPath>
+  </defs>
+
+  <!-- Squircle Base Tile -->
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bgGrad1)"/>
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#ambientGlow1)"/>
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="none" stroke="#494f5a" stroke-width="2" stroke-opacity="0.4"/>
+
+  <!-- Masked Book Group -->
+  <g clip-path="url(#squircleClip1)">
+    <!-- Shelf Floor Shadow -->
+    <rect x="16" y="470" width="480" height="40" fill="#0b0c0e"/>
+
+    <!-- BOOK 1 (Far Left - Small Pocket Spine) -->
+    <g filter="url(#softShadow1)">
+      <!-- Book Body -->
+      <path d="M68 335 C68 325, 78 322, 94 322 C110 322, 126 325, 126 335 L126 500 L68 500 Z" fill="url(#spineLeather1)"/>
+      <!-- Curved Top -->
+      <ellipse cx="97" cy="326" rx="28" ry="6" fill="#da985a"/>
+      <!-- Soft Spine highlight -->
+      <path d="M84 330 L84 500" stroke="#f6c28f" stroke-width="3" stroke-opacity="0.4"/>
+      <path d="M72 334 L72 500" stroke="#542e0e" stroke-width="2" stroke-opacity="0.6"/>
+    </g>
+
+    <!-- BOOK 2 (Slim Vintage Grey/Sage) -->
+    <g filter="url(#softShadow1)">
+      <rect x="138" y="286" width="24" height="220" rx="3" fill="url(#spineSlate1)"/>
+      <ellipse cx="150" cy="287" rx="11" ry="3" fill="#9db0c0"/>
+      <!-- Bookmark ribbon peaking out -->
+      <path d="M149 285 Q145 260 142 245 Q148 248 152 245 Q151 265 151 285" fill="#e11d48"/>
+    </g>
+
+    <!-- BOOK 3 (Classic Hardcover with Visible Pages) -->
+    <g filter="url(#bookShadow)">
+      <!-- Left cover board edge -->
+      <path d="M164 212 L164 500 L171 500 L171 216 Z" fill="#2d3a36"/>
+      <!-- Pages Body (Textured block) -->
+      <path d="M171 216 C185 228, 222 228, 237 214 L237 500 L171 500 Z" fill="url(#pageTanGrad)"/>
+      <!-- Top Curved Page Edge -->
+      <path d="M171 216 C185 228, 222 228, 237 214 C224 206, 185 206, 171 216 Z" fill="#ebd6b7" stroke="#b49366" stroke-width="1"/>
+      <!-- Delicate Page Lines Effect -->
+      <path d="M184 227 L184 500" stroke="#b9996c" stroke-width="1.2" stroke-opacity="0.35"/>
+      <path d="M198 228 L198 500" stroke="#b9996c" stroke-width="1" stroke-opacity="0.3"/>
+      <path d="M212 228 L212 500" stroke="#b9996c" stroke-width="1.2" stroke-opacity="0.35"/>
+      <path d="M226 225 L226 500" stroke="#b9996c" stroke-width="1" stroke-opacity="0.3"/>
+      <!-- Right cover board edge -->
+      <path d="M237 214 L237 500 L244 500 L244 210 Z" fill="#2d3a36"/>
+    </g>
+
+    <!-- BOOK 4 (Tall Golden Cloth Bound Book) -->
+    <g filter="url(#bookShadow)">
+      <!-- Left dark binding line -->
+      <path d="M246 182 L246 500 L252 500 L252 186 Z" fill="#4a321a"/>
+      <!-- Page Block / Gilded top -->
+      <path d="M252 186 C270 200, 310 200, 326 184 L326 500 L252 500 Z" fill="url(#pageAmberGrad)"/>
+      <!-- Top hollow curvature -->
+      <path d="M252 186 C270 200, 310 200, 326 184 C310 174, 270 174, 252 186 Z" fill="#fbd18d" stroke="#c08432" stroke-width="1"/>
+      <!-- Vertical paper ridges -->
+      <path d="M268 198 L268 500" stroke="#9a621c" stroke-width="1.2" stroke-opacity="0.35"/>
+      <path d="M285 200 L285 500" stroke="#9a621c" stroke-width="1.5" stroke-opacity="0.4"/>
+      <path d="M302 200 L302 500" stroke="#9a621c" stroke-width="1.2" stroke-opacity="0.35"/>
+      <path d="M316 195 L316 500" stroke="#9a621c" stroke-width="1" stroke-opacity="0.3"/>
+      <!-- Right binding spine corner -->
+      <path d="M326 184 L326 500 L332 500 L332 180 Z" fill="#362412"/>
+    </g>
+
+    <!-- BOOK 5 (Grand Classic Hardcover - Far Right, Thick Volume) -->
+    <g filter="url(#bookShadow)">
+      <!-- Left dark cover board edge -->
+      <path d="M336 170 L336 500 L344 500 L344 176 Z" fill="#1b2926"/>
+      <!-- Grand Page Block -->
+      <path d="M344 176 C368 196, 422 196, 444 172 L444 500 L344 500 Z" fill="url(#pageCreamGrad)"/>
+      <!-- Top Deckle Edge / Curvature -->
+      <path d="M344 176 C368 196, 422 196, 444 172 C422 158, 368 158, 344 176 Z" fill="#fff6e8" stroke="#aa8d68" stroke-width="1.2"/>
+      <!-- Page Leaf Ribs -->
+      <path d="M362 191 L362 500" stroke="#937550" stroke-width="1.2" stroke-opacity="0.35"/>
+      <path d="M380 195 L380 500" stroke="#937550" stroke-width="1.5" stroke-opacity="0.4"/>
+      <path d="M398 196 L398 500" stroke="#937550" stroke-width="1.5" stroke-opacity="0.4"/>
+      <path d="M416 193 L416 500" stroke="#937550" stroke-width="1.2" stroke-opacity="0.35"/>
+      <path d="M432 185 L432 500" stroke="#937550" stroke-width="1" stroke-opacity="0.3"/>
+      <!-- Right cover board edge -->
+      <path d="M444 172 L444 500 L452 500 L452 166 Z" fill="#1b2926"/>
+    </g>
+
+    <!-- SLIGHT BACKGROUND BOOK IN REAR (Far Right Edge) -->
+    <path d="M455 160 L455 500 L465 500 L465 155 Z" fill="#3a4843" opacity="0.7"/>
+  </g>
+
+  <!-- Elegant Inner Bevel / Reflection for app icon polish -->
+  <rect x="20" y="20" width="472" height="236" rx="104" fill="url(#ambientGlow1)" opacity="0.6"/>
+</svg>

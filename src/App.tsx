@@ -246,6 +246,7 @@ export default function App() {
     return [];
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [currentAppIcon] = useState<string>('/favicon.svg?v=ios-color');
 
   // UI state
   const [languageMode, setLanguageMode] = useState<'en' | 'gu' | 'both'>('both');
@@ -1320,6 +1321,7 @@ export default function App() {
         onClearAll={handleClearAllBooks}
         onOpenBackups={handleOpenBackups}
         onOpenInstallModal={() => setIsInstallModalOpen(true)}
+        currentAppIcon={currentAppIcon}
         localDirectory={localDirectory}
         totalBooksCount={books.length}
         currentUser={currentUser}
