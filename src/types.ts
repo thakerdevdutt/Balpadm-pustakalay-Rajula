@@ -21,6 +21,9 @@ export interface Book {
   createdBy?: string;
   status?: 'Available' | 'Issued';
   currentBorrower?: string;
+  isIssued?: boolean;
+  currentBorrowerName?: string;
+  currentIssueDueDate?: string;
 }
 
 export interface BorrowerRecord {

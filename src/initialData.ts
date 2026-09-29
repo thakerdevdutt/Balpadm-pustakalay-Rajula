@@ -37,7 +37,7 @@ export const resolveBookCreatedBy = (
   return 'Devdutt Thaker';
 };
 
-export const INITIAL_BOOKS: Book[] = [];
+export const INITIAL_BOOKS: Book[] = IMPORTED_BOOKS;
 export const SAMPLE_BOOKS: Book[] = IMPORTED_BOOKS;
 
 export const INITIAL_BORROWERS: BorrowerRecord[] = [];

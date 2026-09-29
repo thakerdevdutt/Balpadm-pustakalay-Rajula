@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { Book, MasterData, BorrowerRecord, AppUser } from './types';
+import { formatDateToDDMMYYYY, getTodayDDMMYYYY } from './utils/dateUtils';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -248,7 +249,7 @@ export const issueBookInFirestore = async (issueRecord: BorrowerRecord) => {
       await setDoc(bookRef, {
         isIssued: true,
         currentBorrowerName: issueRecord.borrowerName,
-        currentIssueDueDate: issueRecord.dueDate
+        currentIssueDueDate: formatDateToDDMMYYYY(issueRecord.dueDate) || issueRecord.dueDate
       }, { merge: true });
     }
   } catch (err) {
@@ -263,7 +264,7 @@ export const issueBookInFirestore = async (issueRecord: BorrowerRecord) => {
 export const returnBookInFirestore = async (issueId: string, bookId?: string) => {
   if (!issueId) return;
   try {
-    const returnDate = new Date().toISOString().slice(0, 10);
+    const returnDate = getTodayDDMMYYYY();
     const issueRef = doc(db, BORROWERS_COLLECTION, String(issueId));
     await setDoc(issueRef, { status: 'Returned', returnDate }, { merge: true });
 

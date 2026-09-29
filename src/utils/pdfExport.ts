@@ -1,4 +1,5 @@
 import { Book } from '../types';
+import { formatDateToDDMMYYYY } from './dateUtils';
 import { resolveBookCreatedBy } from '../initialData';
 
 export function openCatalogPrintView(
@@ -47,11 +48,7 @@ export function openCatalogPrintView(
     return;
   }
 
-  const formattedDate = new Date().toLocaleDateString('gu-IN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  const formattedDate = formatDateToDDMMYYYY(new Date());
 
   let sectionsHtml = '';
 

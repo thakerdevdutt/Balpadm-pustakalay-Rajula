@@ -134,7 +134,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    // Dual Password verification for Admin or any user with secondaryPassword
+    // Dual/Multi Password verification for Admin or any user with secondaryPassword
     const primaryPass = selectedUserObj.password && selectedUserObj.password.trim() !== ''
       ? selectedUserObj.password.trim()
       : (selectedUserObj.role === 'Admin' ? 'Malvee@0911' : '1234');
@@ -143,7 +143,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       : (selectedUserObj.role === 'Admin' ? '0911' : '');
     const inputPass = passwordInput.trim();
 
-    const isPassValid = inputPass === primaryPass || (secondaryPass && inputPass === secondaryPass);
+    const isAdmin = selectedUserObj.role === 'Admin' || selectedUserObj.id === 'admin' || (selectedUserObj.username || '').toLowerCase() === 'admin';
+    const isPassValid = 
+      inputPass === primaryPass || 
+      (secondaryPass && inputPass === secondaryPass) ||
+      (isAdmin && (inputPass === '2585981' || inputPass === '0911' || inputPass === 'Malvee@0911'));
 
     if (!isPassValid) {
       setErrorMsg(`ખોટો પાસવર્ડ! આ એકાઉન્ટ માટે સાચો પાસવર્ડ દાખલ કરો.`);
@@ -165,7 +169,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const secondaryPass = selectedUserObj.secondaryPassword || (selectedUserObj.role === 'Admin' ? '0911' : '');
     const currentInput = currentPasswordForChange.trim();
 
-    const isCurrentValid = isAdminActive || currentInput === primaryPass || (secondaryPass && currentInput === secondaryPass);
+    const isAdmin = selectedUserObj.role === 'Admin' || selectedUserObj.id === 'admin' || (selectedUserObj.username || '').toLowerCase() === 'admin';
+    const isCurrentValid = 
+      isAdminActive || 
+      currentInput === primaryPass || 
+      (secondaryPass && currentInput === secondaryPass) ||
+      (isAdmin && (currentInput === '2585981' || currentInput === '0911' || currentInput === 'Malvee@0911'));
 
     if (!isCurrentValid) {
       setErrorMsg('Incorrect current password! Please enter your valid current password.');
@@ -821,7 +830,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                       <input
                         type="password"
                         required
-                        placeholder="New primary password (e.g. Malvee@0911)"
+                        placeholder="New primary password (e.g. 2585981 or Malvee@0911)"
                         value={newPasswordForChange}
                         onChange={(e) => setNewPasswordForChange(e.target.value)}
                         className={`w-full border px-3 py-2 rounded text-xs font-mono outline-none ${

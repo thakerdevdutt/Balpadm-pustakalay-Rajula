@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BorrowerRecord, UserRole, AppUser } from '../types';
 import { X, Search, CheckCircle2, AlertCircle, BookCheck, Clock, UserCheck, Trash2 } from 'lucide-react';
+import { formatDateToDDMMYYYY, parseDate } from '../utils/dateUtils';
 
 interface IssueListModalProps {
   isOpen: boolean;
@@ -142,8 +143,9 @@ export const IssueListModal: React.FC<IssueListModalProps> = ({
                   </tr>
                 ) : (
                   filtered.map((b) => {
+                    const dueDateObj = parseDate(b.dueDate);
                     const isOverdue =
-                      b.status === 'Issued' && new Date(b.dueDate) < new Date();
+                      b.status === 'Issued' && !!dueDateObj && dueDateObj < new Date();
 
                     return (
                       <tr key={b.issueId} className="hover:bg-purple-50/50 transition-colors">
@@ -163,10 +165,15 @@ export const IssueListModal: React.FC<IssueListModalProps> = ({
                           {b.mobile || '—'}
                         </td>
                         <td className="py-2 px-3 text-slate-600 font-mono">
-                          <div>Iss: {b.issueDate}</div>
+                          <div>Iss: {formatDateToDDMMYYYY(b.issueDate)}</div>
                           <div className={isOverdue ? 'text-rose-600 font-bold' : ''}>
-                            Due: {b.dueDate}
+                            Due: {formatDateToDDMMYYYY(b.dueDate)}
                           </div>
+                          {b.returnDate && (
+                            <div className="text-[10px] text-emerald-700 font-semibold">
+                              Ret: {formatDateToDDMMYYYY(b.returnDate)}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2 px-3">
                           {b.status === 'Returned' ? (

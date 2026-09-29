@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Book, SearchCriterion } from '../types';
+import { Book, SearchCriterion, BorrowerRecord } from '../types';
 import { resolveBookCreatedBy } from '../initialData';
-import { Search, Monitor, Apple, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Maximize2, Minimize2, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw, ListFilter, Trash2, ChevronDown, Check } from 'lucide-react';
+import { Search, Monitor, Apple, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Maximize2, Minimize2, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw, ListFilter, Trash2, ChevronDown, Check, BookOpen } from 'lucide-react';
+import { formatDateToDDMMYYYY, isDateOverdue } from '../utils/dateUtils';
 
 type SortField = 'Book ID' | 'Book Name' | 'Author' | 'Category' | 'Language' | 'Book Type' | 'Entry By';
 type SortDirection = 'asc' | 'desc';
@@ -19,6 +20,7 @@ interface FrameSearchListProps {
   selectedBookId?: string;
   languageMode: 'en' | 'gu' | 'both';
   isAdmin?: boolean;
+  borrowers?: BorrowerRecord[];
 }
 
 export const FrameSearchList: React.FC<FrameSearchListProps> = ({
@@ -34,8 +36,49 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
   selectedBookId,
   languageMode,
   isAdmin = false,
+  borrowers = [],
 }) => {
-  const safeBooks = Array.isArray(books) ? books : [];
+  const safeBooks = (Array.isArray(books) ? books : []).filter((b) => {
+    if (!b || !b.bookId) return false;
+    const num = parseInt(String(b.bookId).replace(/\D/g, ''), 10);
+    return !isNaN(num) && num < 1000;
+  });
+
+  // Active borrowers map for fast lookup of issued books
+  const activeBorrowerMap = useMemo(() => {
+    const map = new Map<string, BorrowerRecord>();
+    if (Array.isArray(borrowers)) {
+      borrowers.forEach((b) => {
+        if (b && b.status === 'Issued' && b.bookId) {
+          map.set(String(b.bookId).trim(), b);
+        }
+      });
+    }
+    return map;
+  }, [borrowers]);
+
+  // Helper to get active borrower for a given book
+  const getActiveBorrowerForBook = (book: Book): BorrowerRecord | null => {
+    if (!book) return null;
+    const cleanId = String(book.bookId || '').trim();
+    if (cleanId && activeBorrowerMap.has(cleanId)) {
+      return activeBorrowerMap.get(cleanId)!;
+    }
+    if (book.isIssued || book.status === 'Issued' || book.currentBorrowerName) {
+      return {
+        issueId: 'ISS-ACTIVE',
+        bookId: book.bookId,
+        bookName: book.bookName,
+        borrowerName: book.currentBorrowerName || 'ઉધાર લેનાર',
+        address: '',
+        mobile: '',
+        issueDate: '',
+        dueDate: book.currentIssueDueDate || '',
+        status: 'Issued',
+      };
+    }
+    return null;
+  };
 
   // OS Mode binding simulator (Windows RowSource vs Mac Variant Array)
   const [osMode, setOsMode] = useState<'Windows' | 'Mac'>('Windows');
@@ -551,7 +594,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
 
               <th
                 onClick={() => handleColumnHeaderClick('Book Name')}
-                className={`px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[27%]' : 'w-[29%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book Name' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[25%]' : 'w-[28%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book Name' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Book Name"
               >
                 <div className="flex items-center justify-between gap-1">
@@ -606,7 +649,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
 
               <th
                 onClick={() => handleColumnHeaderClick('Entry By')}
-                className={`px-2 py-2 ${isAdmin ? 'w-[10%] border-r border-slate-700' : 'w-[10%]'} text-slate-300 cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Entry By' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`px-2 py-2 border-r border-slate-700 w-[10%] text-slate-300 cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Entry By' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Entry By"
               >
                 <div className="flex items-center justify-between gap-1">
@@ -615,22 +658,20 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
                 </div>
               </th>
 
-              {isAdmin && (
-                <th
-                  className="px-2 py-2 w-[5%] text-center text-slate-300 font-semibold"
-                  title="Delete Book Record (Admin Only)"
-                >
-                  <div className="flex items-center justify-center gap-0.5">
-                    <span>DEL</span>
-                  </div>
-                </th>
-              )}
+              <th
+                className={`px-1.5 py-2 ${isAdmin ? 'w-[7%]' : 'w-[5%]'} text-center text-slate-300 font-semibold`}
+                title={isAdmin ? "Book Status & Delete Action (ઈશ્યુ સ્ટેટસ / ડિલીટ)" : "Book Status (ઈશ્યુ સ્ટેટસ - હાજરી)"}
+              >
+                <div className="flex items-center justify-center gap-0.5">
+                  <span>{isAdmin ? 'ACTION' : 'STATUS'}</span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody className="text-sm">
             {books.length === 0 ? (
               <tr>
-                <td colSpan={isAdmin ? 8 : 6} className="px-4 py-12 text-center text-slate-300 font-sans bg-slate-900 space-y-2">
+                <td colSpan={8} className="px-4 py-12 text-center text-slate-300 font-sans bg-slate-900 space-y-2">
                   <div className="text-base font-bold text-slate-100">હાલમાં કોઈ પુસ્તક ડેટા નથી (0 Books)</div>
                   <div className="text-xs text-slate-400 max-w-md mx-auto">
                     તમારો પોતાનો સાચો Excel ડેટા લોડ કરવા માટે ઉપરના હેડરમાં આવેલા 
@@ -641,13 +682,14 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
               </tr>
             ) : paginatedBooks.length === 0 ? (
               <tr>
-                <td colSpan={isAdmin ? 8 : 6} className="px-4 py-8 text-center text-slate-400 italic font-sans bg-slate-900">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400 italic font-sans bg-slate-900">
                   કોઈ પુસ્તક મળ્યું નથી matching "{searchValue}". (શોધ સાફ કરવા ✕ બટન પર ક્લિક કરો)
                 </td>
               </tr>
             ) : (
               paginatedBooks.map((book) => {
                 const isSelected = book.bookId === selectedBookId;
+                const activeBorrower = getActiveBorrowerForBook(book);
                 return (
                   <tr
                     key={book.bookId}
@@ -681,28 +723,65 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
                     <td className={`px-2 py-2 font-sans text-xs truncate ${isSelected ? 'text-white' : 'opacity-90'}`}>
                       {resolveBookCreatedBy(book.bookId, book.createdBy)}
                     </td>
-                    {isAdmin && (
-                      <td
-                        className="px-1 py-1.5 text-center"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteBook(book.bookId);
-                          }}
-                          className={`p-1 rounded ${
-                            isSelected
-                              ? 'bg-indigo-800/80 hover:bg-slate-900 text-slate-200 hover:text-white border border-indigo-400/50'
-                              : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-600'
-                          } transition-all inline-flex items-center justify-center cursor-pointer shadow-sm`}
-                          title={`પુસ્તક #${book.bookId} (${book.bookName}) Delete કરો`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    )}
+                    <td
+                      className="px-1 py-1.5 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        {/* Book icon if issued (હાજરમાં નથી) - right before delete icon */}
+                        {activeBorrower ? (() => {
+                          const isOverdue = isDateOverdue(activeBorrower.dueDate);
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectBook(book, false);
+                                const borrowerSection = document.getElementById('frame-3-borrower-info');
+                                if (borrowerSection) {
+                                  borrowerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                              }}
+                              className={`p-1 rounded transition-all inline-flex items-center justify-center cursor-pointer shadow-sm ${
+                                isOverdue
+                                  ? (isSelected
+                                      ? 'bg-rose-600 hover:bg-rose-500 text-white font-bold ring-2 ring-rose-400 shadow-rose-900/50'
+                                      : 'bg-rose-500/30 hover:bg-rose-500/50 text-rose-300 hover:text-white border border-rose-500/80 shadow-rose-900/40 ring-1 ring-rose-500/60')
+                                  : (isSelected
+                                      ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold ring-2 ring-amber-300'
+                                      : 'bg-amber-500/25 hover:bg-amber-500/40 text-amber-300 hover:text-amber-100 border border-amber-500/70')
+                              }`}
+                              title={
+                                isOverdue
+                                  ? `🚨 અવધિ પૂરી થઈ ગઈ છે (મુદત વીતી ગઈ છે / OVERDUE)!\nઉધાર લેનાર: ${activeBorrower.borrowerName}\nનિયત પરત તારીખ (Due Date): ${formatDateToDDMMYYYY(activeBorrower.dueDate)}\nક્લિક કરો: નીચે Borrower Name અને વિગતો ભરાઈ જશે`
+                                  : `⚠️ પુસ્તક ઈશ્યુ કરેલ છે (હાજરમાં નથી)\nઉધાર લેનાર: ${activeBorrower.borrowerName}${activeBorrower.issueDate ? `\nતારીખ (Issue Date): ${formatDateToDDMMYYYY(activeBorrower.issueDate)}` : ''}${activeBorrower.dueDate ? `\nપરત તારીખ (Due Date): ${formatDateToDDMMYYYY(activeBorrower.dueDate)}` : ''}\nક્લિક કરો: નીચે Borrower Name અને વિગતો ભરાઈ જશે`
+                              }
+                            >
+                              <BookOpen className={`w-3.5 h-3.5 ${isOverdue ? 'text-rose-200 animate-bounce' : 'animate-pulse'}`} />
+                            </button>
+                          );
+                        })() : null}
+
+                        {/* Delete Book Record (Admin Only) */}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteBook(book.bookId);
+                            }}
+                            className={`p-1 rounded ${
+                              isSelected
+                                ? 'bg-indigo-800/80 hover:bg-slate-900 text-slate-200 hover:text-white border border-indigo-400/50'
+                                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-600'
+                            } transition-all inline-flex items-center justify-center cursor-pointer shadow-sm`}
+                            title={`પુસ્તક #${book.bookId} (${book.bookName}) Delete કરો`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })

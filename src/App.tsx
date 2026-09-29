@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Book, BorrowerRecord, MasterData, SearchCriterion, BackupItem, PDFExportItem, AppUser, AppTheme } from './types';
 import { INITIAL_BOOKS, SAMPLE_BOOKS, INITIAL_BORROWERS, INITIAL_MASTERS, resolveBookCreatedBy } from './initialData';
+import { IMPORTED_BOOKS } from './importedBooks';
 import { exportDatabaseToExcel, parseExcelFile, parseGoogleSheetUrl, fixGarbledText, cleanBookTitle } from './utils/excelExport';
 
 // Inlined file path helpers for local file links
@@ -109,6 +110,7 @@ import { InstallAppModal } from './components/InstallAppModal';
 import { PDFExportModal } from './components/PDFExportModal';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { CheckCircle2, Info, FileSpreadsheet, AlertTriangle, Trash2 } from 'lucide-react';
+import { formatDateToDDMMYYYY, getTodayDDMMYYYY } from './utils/dateUtils';
 
 export default function App() {
   // Helper to sanitize any garbled UTF-8 strings and standardize creator name:
@@ -133,7 +135,14 @@ export default function App() {
   // Key for local persistence - strictly for user's custom saved database
   const CURRENT_STORAGE_KEY = 'my_book_collection_user_books_v5000_clean';
 
-  // Persistence state in localStorage - returns 0 if cleared, or user saved books
+  // Helper to identify spillover books (ID >= 1000) from the user's other 1095 project
+  const isSpilloverBook = (b: any): boolean => {
+    if (!b || !b.bookId) return false;
+    const num = parseInt(String(b.bookId).replace(/\D/g, ''), 10);
+    return !isNaN(num) && num >= 1000;
+  };
+
+  // Persistence state in localStorage - returns 0 if cleared, or user saved books / default catalog
   const getAllLocalBooks = (): Book[] => {
     if (localStorage.getItem('my_book_collection_is_cleared') === 'true') {
       return [];
@@ -142,14 +151,18 @@ export default function App() {
       const raw = localStorage.getItem(CURRENT_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return parsed.map(sanitizeBook);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Strictly exclude any spillover books (ID >= 1000)
+          const validBooks = parsed.filter((b) => !isSpilloverBook(b));
+          if (validBooks.length > 0) {
+            return validBooks.map(sanitizeBook);
+          }
         }
       }
     } catch (e) {
       console.error('Error recovering local books:', e);
     }
-    return [];
+    return IMPORTED_BOOKS.map(sanitizeBook);
   };
 
   const [books, setBooks] = useState<Book[]>(() => {
@@ -426,29 +439,52 @@ export default function App() {
         return;
       }
 
+      // Detect and purge spillover books (ID >= 1000) from Firestore immediately
+      if (Array.isArray(cloudBooks)) {
+        const spilloverBooks = cloudBooks.filter(isSpilloverBook);
+        if (spilloverBooks.length > 0) {
+          spilloverBooks.forEach((sb) => {
+            if (sb && sb.bookId) {
+              deleteBookFromFirestore(String(sb.bookId)).catch(() => {});
+            }
+          });
+        }
+      }
+
+      // Filter cloudBooks to strictly keep valid books (ID < 1000)
+      const validCloudBooks = (cloudBooks || []).filter((b) => !isSpilloverBook(b));
+
       const localBooks = getAllLocalBooks();
       let merged: Book[] = [];
 
-      if (Array.isArray(cloudBooks) && cloudBooks.length > 0) {
+      if (Array.isArray(validCloudBooks) && validCloudBooks.length > 0) {
         localStorage.removeItem('my_book_collection_is_cleared');
         const bookMap = new Map<string, Book>();
 
         localBooks.forEach((b) => {
-          if (b && b.bookId) {
+          if (b && b.bookId && !isSpilloverBook(b)) {
             bookMap.set(String(b.bookId), sanitizeBook(b));
           }
         });
 
-        cloudBooks.forEach((b) => {
-          if (b && b.bookId) {
+        validCloudBooks.forEach((b) => {
+          if (b && b.bookId && !isSpilloverBook(b)) {
             bookMap.set(String(b.bookId), sanitizeBook(b));
           }
         });
 
-        merged = Array.from(bookMap.values());
+        merged = Array.from(bookMap.values()).filter((b) => !isSpilloverBook(b));
         localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(merged));
       } else {
-        merged = localBooks.map(sanitizeBook);
+        const base = localBooks.length > 0 ? localBooks : IMPORTED_BOOKS;
+        merged = base.filter((b) => !isSpilloverBook(b)).map(sanitizeBook);
+        if (merged.length > 0 && localStorage.getItem('my_book_collection_is_cleared') !== 'true') {
+          localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(merged));
+          // Auto-seed cloud database so all 163 books are permanently stored in Firestore
+          bulkSaveBooksToFirestore(merged).catch((err) => {
+            console.warn('Sync 163 books to firestore notice:', err);
+          });
+        }
       }
 
       setBooks(sortBooksIndependently(merged));
@@ -517,9 +553,9 @@ export default function App() {
   const generateNextBookID = useCallback((currentBooks: Book[]): string => {
     if (!Array.isArray(currentBooks) || currentBooks.length === 0) return '1';
     const numericIds = currentBooks
-      .filter((b) => b && typeof b === 'object' && b.bookId)
+      .filter((b) => b && typeof b === 'object' && b.bookId && !isSpilloverBook(b))
       .map((b) => parseInt(String(b.bookId).replace(/\D/g, ''), 10))
-      .filter((num) => !isNaN(num));
+      .filter((num) => !isNaN(num) && num < 1000);
 
     if (numericIds.length === 0) return '1';
     const maxId = Math.max(...numericIds);
@@ -939,7 +975,7 @@ export default function App() {
               ...b,
               isIssued: true,
               currentBorrowerName: borrowerData.borrowerName,
-              currentIssueDueDate: borrowerData.dueDate,
+              currentIssueDueDate: formatDateToDDMMYYYY(borrowerData.dueDate) || borrowerData.dueDate,
             }
           : b
       )
@@ -965,7 +1001,7 @@ export default function App() {
     setBorrowers((prev) =>
       prev.map((b) =>
         b.issueId === issueId
-          ? { ...b, status: 'Returned', returnDate: new Date().toISOString().slice(0, 10) }
+          ? { ...b, status: 'Returned', returnDate: getTodayDDMMYYYY() }
           : b
       )
     );
@@ -1368,6 +1404,7 @@ export default function App() {
         {/* FRAME 2: Search & List Window */}
         <FrameSearchList
           books={books}
+          borrowers={borrowers}
           searchCriterion={searchCriterion}
           setSearchCriterion={setSearchCriterion}
           searchValue={searchValue}
@@ -1388,11 +1425,14 @@ export default function App() {
         {/* FRAME 3: Borrower Information */}
         <FrameBorrowerInfo
           selectedBook={selectedBookForIssue || (isEditing ? formData : null)}
+          borrowers={borrowers}
           onIssueBook={handleIssueBook}
+          onReturnBook={handleReturnBook}
           onOpenIssueList={() => setIsIssueListOpen(true)}
           languageMode={languageMode}
           totalIssuedCount={borrowers.filter((b) => b.status === 'Issued').length}
           canIssue={currentUser?.role === 'Admin' || currentUser?.role === 'Super User'}
+          theme={theme}
         />
 
       </main>

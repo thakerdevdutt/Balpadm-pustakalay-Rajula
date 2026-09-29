@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Book, BorrowerRecord } from '../types';
+import { formatDateToDDMMYYYY } from './dateUtils';
 
 /**
  * Clean cell string: removes UTF-8 BOM, trims whitespace, handles null/undefined
@@ -160,10 +161,10 @@ export function exportDatabaseToExcel(
     b.borrowerName,
     b.address,
     b.mobile,
-    b.issueDate,
-    b.dueDate,
+    formatDateToDDMMYYYY(b.issueDate),
+    formatDateToDDMMYYYY(b.dueDate),
     b.status,
-    b.returnDate || '',
+    formatDateToDDMMYYYY(b.returnDate) || '',
     b.remark,
   ]);
 
@@ -368,10 +369,10 @@ export function parseWorkbook(workbook: XLSX.WorkBook): { books: Book[]; borrowe
           borrowerName: fixGarbledText(cleanCellString(row[3])),
           address: fixGarbledText(cleanCellString(row[4])),
           mobile: fixGarbledText(cleanCellString(row[5])),
-          issueDate: fixGarbledText(cleanCellString(row[6])),
-          dueDate: fixGarbledText(cleanCellString(row[7])),
+          issueDate: formatDateToDDMMYYYY(fixGarbledText(cleanCellString(row[6]))),
+          dueDate: formatDateToDDMMYYYY(fixGarbledText(cleanCellString(row[7]))),
           status: (cleanCellString(row[8]) as any) || 'Issued',
-          returnDate: fixGarbledText(cleanCellString(row[9])),
+          returnDate: formatDateToDDMMYYYY(fixGarbledText(cleanCellString(row[9]))),
           remark: fixGarbledText(cleanCellString(row[10])),
         });
       }
