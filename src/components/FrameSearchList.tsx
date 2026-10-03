@@ -583,18 +583,19 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
             <tr>
               <th
                 onClick={() => handleColumnHeaderClick('Book ID')}
-                className={`px-2 py-2 border-r border-slate-700 ${isAdmin ? 'w-[7%]' : 'w-[8%]'} text-center cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book ID' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`px-1.5 md:px-2 py-2 border-r border-slate-700 w-14 md:w-[7%] text-center cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book ID' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Book ID"
               >
                 <div className="flex items-center justify-center gap-0.5">
-                  <span>BOOK ID</span>
+                  <span className="md:hidden text-[10px]">SR NO</span>
+                  <span className="hidden md:inline">BOOK ID</span>
                   {sortField === 'Book ID' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
                 </div>
               </th>
 
               <th
                 onClick={() => handleColumnHeaderClick('Book Name')}
-                className={`px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[25%]' : 'w-[28%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book Name' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`px-2 md:px-2.5 py-2 border-r border-slate-700 md:w-[25%] cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book Name' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Book Name"
               >
                 <div className="flex items-center justify-between gap-1">
@@ -605,7 +606,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
 
               <th
                 onClick={() => handleColumnHeaderClick('Author')}
-                className={`px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[18%]' : 'w-[19%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Author' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`hidden md:table-cell px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[18%]' : 'w-[19%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Author' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Author"
               >
                 <div className="flex items-center justify-between gap-1">
@@ -616,7 +617,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
 
               <th
                 onClick={() => handleColumnHeaderClick('Category')}
-                className={`px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[14%]' : 'w-[15%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Category' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`hidden md:table-cell px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[14%]' : 'w-[15%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Category' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Category"
               >
                 <div className="flex items-center justify-between gap-1">
@@ -627,7 +628,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
 
               <th
                 onClick={() => handleColumnHeaderClick('Language')}
-                className={`px-2 py-2 border-r border-slate-700 w-[8%] cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Language' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`hidden md:table-cell px-2 py-2 border-r border-slate-700 w-[8%] cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Language' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Language"
               >
                 <div className="flex items-center justify-between gap-1">
@@ -638,7 +639,7 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
 
               <th
                 onClick={() => handleColumnHeaderClick('Book Type')}
-                className={`px-2 py-2 border-r border-slate-700 w-[11%] text-center cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book Type' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`hidden md:table-cell px-2 py-2 border-r border-slate-700 w-[11%] text-center cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book Type' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Book Type"
               >
                 <div className="flex items-center justify-center gap-0.5">
@@ -649,21 +650,21 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
 
               <th
                 onClick={() => handleColumnHeaderClick('Entry By')}
-                className={`px-2 py-2 border-r border-slate-700 w-[10%] text-slate-300 cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Entry By' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                className={`hidden md:table-cell px-2 py-2 border-r border-slate-700 w-[10%] text-slate-300 cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Entry By' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
                 title="Click to sort by Entry By"
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span>ENTRY BY (એન્ટ્રી કરનાર)</span>
+                  <span>ENTRY BY</span>
                   {sortField === 'Entry By' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
                 </div>
               </th>
 
               <th
-                className={`px-1.5 py-2 ${isAdmin ? 'w-[7%]' : 'w-[5%]'} text-center text-slate-300 font-semibold`}
+                className={`px-1 py-2 ${isAdmin ? 'w-20 md:w-[7%]' : 'w-14 md:w-[5%]'} text-center text-slate-300 font-semibold`}
                 title={isAdmin ? "Book Status & Delete Action (ઈશ્યુ સ્ટેટસ / ડિલીટ)" : "Book Status (ઈશ્યુ સ્ટેટસ - હાજરી)"}
               >
                 <div className="flex items-center justify-center gap-0.5">
-                  <span>{isAdmin ? 'ACTION' : 'STATUS'}</span>
+                  <span className="text-[10px] md:text-xs">{isAdmin ? 'ACTION' : 'STATUS'}</span>
                 </div>
               </th>
             </tr>
@@ -702,25 +703,42 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
                         : 'border-slate-700/40'
                     }`}
                   >
-                    <td className={`px-2 py-2 font-mono text-center truncate text-[13px] ${isSelected ? 'text-white' : 'font-semibold'}`}>
+                    {/* 1. SR NO / BOOK ID */}
+                    <td className={`px-1.5 md:px-2 py-2 font-mono text-center truncate text-xs md:text-[13px] ${isSelected ? 'text-white' : 'font-semibold'}`}>
                       {book.bookId}
                     </td>
-                    <td className="px-2.5 py-2 font-sans font-semibold text-[14.5px] leading-snug tracking-wide truncate">
-                      {book.bookName}
+
+                    {/* 2. BOOK NAME (with compact author/category on mobile) */}
+                    <td className="px-2 md:px-2.5 py-2 font-sans font-semibold text-[13.5px] md:text-[14.5px] leading-snug tracking-wide">
+                      <div className="truncate font-semibold">{book.bookName}</div>
+                      {/* On mobile: compact author • category subtitle */}
+                      <div className={`text-[11px] font-normal truncate md:hidden ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        {[book.author, book.category].filter(Boolean).join(' • ')}
+                      </div>
                     </td>
-                    <td className="px-2.5 py-2 font-sans text-[14px] leading-snug truncate">
+
+                    {/* 3. AUTHOR (Desktop only) */}
+                    <td className="hidden md:table-cell px-2.5 py-2 font-sans text-[14px] leading-snug truncate">
                       {book.author}
                     </td>
-                    <td className="px-2.5 py-2 font-sans text-[13.5px] leading-snug truncate">
+
+                    {/* 4. CATEGORY (Desktop only) */}
+                    <td className="hidden md:table-cell px-2.5 py-2 font-sans text-[13.5px] leading-snug truncate">
                       {book.category}
                     </td>
-                    <td className="px-2 py-2 font-sans text-[13.5px] leading-snug truncate">
+
+                    {/* 5. LANGUAGE (Desktop only) */}
+                    <td className="hidden md:table-cell px-2 py-2 font-sans text-[13.5px] leading-snug truncate">
                       {book.language}
                     </td>
-                    <td className="px-2 py-2 font-sans text-center text-xs truncate">
+
+                    {/* 6. BOOK TYPE (Desktop only) */}
+                    <td className="hidden md:table-cell px-2 py-2 font-sans text-center text-xs truncate">
                       {book.bookType || 'Digital PDF'}
                     </td>
-                    <td className={`px-2 py-2 font-sans text-xs truncate ${isSelected ? 'text-white' : 'opacity-90'}`}>
+
+                    {/* 7. ENTRY BY (Desktop only) */}
+                    <td className={`hidden md:table-cell px-2 py-2 font-sans text-xs truncate ${isSelected ? 'text-white' : 'opacity-90'}`}>
                       {resolveBookCreatedBy(book.bookId, book.createdBy)}
                     </td>
                     <td
@@ -760,7 +778,11 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
                               <BookOpen className={`w-3.5 h-3.5 ${isOverdue ? 'text-rose-200 animate-bounce' : 'animate-pulse'}`} />
                             </button>
                           );
-                        })() : null}
+                        })() : (
+                          !isAdmin ? (
+                            <span className="md:hidden text-[11px] text-slate-500 font-mono select-none" title="હાજરમાં છે (Available)">—</span>
+                          ) : null
+                        )}
 
                         {/* Delete Book Record (Admin Only) */}
                         {isAdmin && (

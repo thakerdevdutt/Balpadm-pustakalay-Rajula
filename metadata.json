@@ -1,8 +1,6 @@
 {
-  "name": "લેખ નવો સંગ્રહ (Lekh Sangrah)",
-  "description": "ધૈવત ત્રિવેદી દ્વારા લિખિત લેખો માટેનું ડિજિટલ વાચન મંચ અને મોબાઇલ-ફ્રેન્ડલી રીડર એપ",
+  "name": "બાલપદ્મ પુસ્તકાલય - રાજુલા",
+  "description": "બાલપદ્મ પુસ્તકાલય - રાજુલા - પુસ્તક સંગ્રહ અને લાઈબ્રેરી મેનેજમેન્ટ સિસ્ટમ",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
