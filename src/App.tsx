@@ -1,1748 +1,1504 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Book, BorrowerRecord, MasterData, SearchCriterion, BackupItem, PDFExportItem, AppUser, AppTheme } from './types';
-import { INITIAL_BOOKS, SAMPLE_BOOKS, INITIAL_BORROWERS, INITIAL_MASTERS, resolveBookCreatedBy } from './initialData';
-import { IMPORTED_BOOKS } from './importedBooks';
-import { exportDatabaseToExcel, parseExcelFile, parseGoogleSheetUrl, fixGarbledText, cleanBookTitle } from './utils/excelExport';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-// Inlined file path helpers for local file links
-function isMacSystem(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const platform = navigator.platform || '';
-  const userAgent = navigator.userAgent || '';
-  return /Mac|iPhone|iPad|iPod/i.test(platform) || /Mac|iPhone|iPad|iPod/i.test(userAgent);
-}
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { 
+  PlusCircle, 
+  Lightbulb, 
+  Bookmark, 
+  Share2, 
+  Search, 
+  BookOpen, 
+  Database, 
+  Smartphone,
+  Sparkles,
+  ArrowRight,
+  RotateCcw,
+  CheckCircle2,
+  Users,
+  BarChart2,
+  Lock,
+  Phone,
+  MessageCircle,
+  AlertCircle,
+  RefreshCw,
+  Check
+} from 'lucide-react';
 
-function getBookFileName(book: Book | null): string {
-  if (!book || !book.bookName) return 'SampleBook.pdf';
-  const rawTitle = book.bookName.trim();
-  const ext = book.bookType?.toLowerCase().includes('epub') ? '.epub' : '.pdf';
-  if (rawTitle.toLowerCase().endsWith('.pdf') || rawTitle.toLowerCase().endsWith('.epub')) {
-    return rawTitle;
-  }
-  const bookIdStr = String(book.bookId || '').trim();
-  if (bookIdStr) {
-    const idPrefixRegex = new RegExp(`^${bookIdStr}[\\s\\-_.]+`, 'i');
-    if (idPrefixRegex.test(rawTitle)) {
-      return `${rawTitle}${ext}`;
-    }
-  }
-  return `${book.bookId} - ${rawTitle}${ext}`;
-}
-
-function getWinPath(book: Book | null, localDirectory: string, wrapInQuotes: boolean = false): string {
-  let normDir = (localDirectory || 'D:\\My Books\\My Books').trim().replace(/^["']+|["']+$/g, '');
-  if (normDir.startsWith('/') || normDir.startsWith('~')) {
-    normDir = 'D:\\My Books\\My Books';
-  }
-  normDir = normDir.replace(/[/\\]+$/, '');
-  const fileName = getBookFileName(book);
-  const fullPath = `${normDir}\\${fileName}`;
-  return wrapInQuotes ? `"${fullPath}"` : fullPath;
-}
-
-function getMacPath(book: Book | null, localDirectory: string, wrapInQuotes: boolean = true, includeOpenCmd: boolean = true): string {
-  let normDir = (localDirectory || '/Volumes/D-My Works/My Books/My Books').trim().replace(/^["']+|["']+$/g, '');
-  if (/^[a-zA-Z]:/.test(normDir) || normDir.includes('\\')) {
-    const driveMatch = normDir.match(/^([a-zA-Z]):/);
-    if (driveMatch) {
-      const driveLetter = driveMatch[1].toUpperCase();
-      const driveMap: Record<string, string> = {
-        'C': '/Volumes/C-Windows11',
-        'D': '/Volumes/D-My Works',
-        'E': '/Volumes/E-Backup',
-        'F': '/Volumes/F-All in On',
-        'G': '/Volumes/G-Movies',
-      };
-      const macVolume = driveMap[driveLetter] || `/Volumes/${driveLetter}-Drive`;
-      const restOfPath = normDir.replace(/^[a-zA-Z]:/, '').replace(/\\/g, '/');
-      normDir = `${macVolume}${restOfPath}`;
-    } else {
-      normDir = normDir.replace(/\\/g, '/');
-    }
-  }
-  if (!normDir.startsWith('/') && !normDir.startsWith('~')) {
-    normDir = `/Volumes/D-My Works/${normDir}`;
-  }
-  normDir = normDir.replace(/\/+$/, '');
-  const fileName = getBookFileName(book);
-  const fullPath = `${normDir}/${fileName}`;
-  if (includeOpenCmd) return `open "${fullPath}"`;
-  return wrapInQuotes ? `"${fullPath}"` : fullPath;
-}
-
-function getPCPath(book: Book | null, localDirectory: string, osType?: 'win' | 'mac', wrapInQuotes: boolean = true, includeOpenCmd: boolean = true): string {
-  const targetOS = osType || (isMacSystem() ? 'mac' : 'win');
-  if (targetOS === 'mac') {
-    return getMacPath(book, localDirectory, wrapInQuotes, includeOpenCmd);
-  } else {
-    return getWinPath(book, localDirectory, wrapInQuotes);
-  }
-}
+import { Article, WeeklyIssue, ReadingTheme, FontSizeLevel } from './types';
+import { APP_VERSION } from './version';
+import { INITIAL_ISSUES } from './data/sampleIssues';
+import { Navbar } from './components/Navbar';
+// Removed bulky IssueHero and IssueSelector as requested
+import { ArticleCard } from './components/ArticleCard';
+import { ArticleReader } from './components/ArticleReader';
+import { AddIssueModal } from './components/AddIssueModal';
+import { InstallGuideModal } from './components/InstallGuideModal';
+import { BookmarksDrawer } from './components/BookmarksDrawer';
+import { BackupModal } from './components/BackupModal';
+import { AdminPasswordModal } from './components/AdminPasswordModal';
+import { StatisticsModal } from './components/StatisticsModal';
+import { 
+  subscribeToIssues, 
+  saveIssueToCloud, 
+  saveIssueMetadataToCloud,
+  saveSingleArticleToCloud,
+  saveAllIssuesToCloud,
+  subscribeToCustomCategories,
+  subscribeToCustomAuthors,
+  subscribeToVisitorCount,
+  recordVisitorHit,
+  fetchSingleArticleFromCloud,
+  burnArticleOtpInCloud,
+  verifyAndBurnArticleOtpInCloud,
+  hasQuotaExceeded,
+  subscribeToAdminContactPhone,
+  fetchIssuesFromCloud,
+  checkCloudSyncStatus
+} from './services/firebaseService';
+import { 
+  cleanAndNormalizeCode, 
+  verifySmartArticleOtp, 
+  burnOtpLocally 
+} from './services/otpService';
+import { 
+  extractCategoriesFromArticles, 
+  saveCustomCategoriesBatch,
+  REMOVED_LEGACY_CATEGORIES,
+  computeCategoryTabsData
+} from './utils/categories';
+import { 
+  saveCustomAuthorsBatch 
+} from './utils/authors';
 import {
-  subscribeBooksFromFirestore,
-  saveBookToFirestore,
-  deleteBookFromFirestore,
-  bulkSaveBooksToFirestore,
-  subscribeMasterDataFromFirestore,
-  saveMasterDataToFirestore,
-  subscribeBorrowersFromFirestore,
-  issueBookInFirestore,
-  returnBookInFirestore,
-  deleteBorrowerInFirestore,
-  clearAllBooksInFirestore,
-  subscribeUsersFromFirestore,
-  saveUserToFirestore,
-  deleteUserFromFirestore,
-  setOnQuotaExceededListener
-} from './firebase';
+  getDeletedArticleIds,
+  mergeIssuesSafely
+} from './utils/storage';
+import { getTabColorClasses } from './utils/categoryColors';
+import { getAdminOtpUrl } from './utils/share';
 
-import { Header } from './components/Header';
-import { FrameBookEntry } from './components/FrameBookEntry';
-import { ActionButtons } from './components/ActionButtons';
-import { FrameSearchList } from './components/FrameSearchList';
-import { FrameBorrowerInfo } from './components/FrameBorrowerInfo';
-import { MasterManagementModal } from './components/MasterManagementModal';
-import { VBACodeModal } from './components/VBACodeModal';
-import { IssueListModal } from './components/IssueListModal';
-import { BackupFolderModal } from './components/BackupFolderModal';
-import { LoginModal } from './components/LoginModal';
-import { InstallAppModal } from './components/InstallAppModal';
-import { PDFExportModal } from './components/PDFExportModal';
-import { ExcelImportModal } from './components/ExcelImportModal';
-import { CheckCircle2, Info, FileSpreadsheet, AlertTriangle, Trash2 } from 'lucide-react';
-import { formatDateToDDMMYYYY, getTodayDDMMYYYY } from './utils/dateUtils';
+// Helper to prevent unnecessary re-renders when issues are structurally identical
+function areIssuesEqual(a: WeeklyIssue[], b: WeeklyIssue[]): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const issA = a[i];
+    const issB = b[i];
+    if (issA.id !== issB.id) return false;
+    const artsA = issA.articles || [];
+    const artsB = issB.articles || [];
+    if (artsA.length !== artsB.length) return false;
+    for (let j = 0; j < artsA.length; j++) {
+      const artA = artsA[j];
+      const artB = artsB[j];
+      if (
+        artA.id !== artB.id ||
+        (artA.updatedAt || 0) !== (artB.updatedAt || 0) ||
+        artA.title !== artB.title ||
+        artA.content !== artB.content ||
+        Boolean(artA.isPasswordProtected) !== Boolean(artB.isPasswordProtected) ||
+        (artA.password || '') !== (artB.password || '') ||
+        Boolean(artA.copyEnable) !== Boolean(artB.copyEnable) ||
+        (artA.oneTimePasscodes || []).length !== (artB.oneTimePasscodes || []).length ||
+        (artA.oneTimePasscodes || []).join(',') !== (artB.oneTimePasscodes || []).join(',')
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 export default function App() {
-  // Helper to sanitize any garbled UTF-8 strings and standardize creator name:
-  // - Sr No 01 to 17 = Devdutt Thaker
-  // - Sr No 18 to 107 = Jignesh Upadhyay
-  // - Sr No 108 to 163 = Devdutt Thaker
-  const sanitizeBook = (b: Book): Book => {
-    return {
-      ...b,
-      bookName: cleanBookTitle(b.bookName || ''),
-      author: fixGarbledText(b.author || ''),
-      category: fixGarbledText(b.category || ''),
-      translator: fixGarbledText(b.translator || ''),
-      language: fixGarbledText(b.language || ''),
-      publisher: fixGarbledText(b.publisher || ''),
-      bookType: fixGarbledText(b.bookType || ''),
-      remarks1: fixGarbledText(b.remarks1 || ''),
-      createdBy: resolveBookCreatedBy(b.bookId, b.createdBy),
-    };
-  };
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'connected' | 'syncing' | 'offline'>('connected');
 
-  // Key for local persistence - strictly for user's custom saved database
-  const CURRENT_STORAGE_KEY = 'my_book_collection_user_books_v5000_clean';
+  // Local storage loaded state - preserved faithfully so F5 never loses newly added articles
+  const [issues, setIssues] = useState<WeeklyIssue[]>(() => {
+    try {
+      const saved = localStorage.getItem('lekh_sangrah_issues');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const deletedIds = getDeletedArticleIds();
+          const cleaned = parsed
+            .filter((iss: WeeklyIssue) => iss && typeof iss === 'object' && iss.id !== 'issue-1' && iss.id !== 'issue-2')
+            .map((iss: WeeklyIssue) => ({
+              ...iss,
+              articles: (iss.articles || []).filter((a: Article) => a && typeof a === 'object' && a.id && !deletedIds.has(a.id)),
+            }));
+          if (cleaned.length > 0 && cleaned.some(iss => (iss.articles || []).length > 0)) {
+            return cleaned;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error loading saved issues:', e);
+    }
+    return INITIAL_ISSUES;
+  });
 
-  // Helper to identify spillover books (ID >= 1000) from the user's other 1095 project
-  const isSpilloverBook = (b: any): boolean => {
-    if (!b || !b.bookId) return false;
-    const num = parseInt(String(b.bookId).replace(/\D/g, ''), 10);
-    return !isNaN(num) && num >= 1000;
-  };
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(false);
 
-  // Persistence state in localStorage - returns 0 if cleared, or user saved books / default catalog
-  const getAllLocalBooks = (): Book[] => {
-    if (localStorage.getItem('my_book_collection_is_cleared') === 'true') {
+  const [selectedIssueId, setSelectedIssueId] = useState<string>(() => {
+    return issues[0]?.id || 'collection-main';
+  });
+
+  // Ensure selected issue ID is always in sync with valid issues
+  useEffect(() => {
+    if (issues.length > 0 && !issues.some(i => i.id === selectedIssueId)) {
+      setSelectedIssueId(issues[0].id);
+    }
+  }, [issues, selectedIssueId]);
+
+  const [activeArticle, setActiveArticle] = useState<Article | null>(null);
+
+  const [readingTheme, setReadingTheme] = useState<ReadingTheme>(() => {
+    return (localStorage.getItem('lekh_reading_theme') as ReadingTheme) || 'light';
+  });
+
+  const [fontSize, setFontSize] = useState<FontSizeLevel>(() => {
+    return (localStorage.getItem('lekh_font_size') as FontSizeLevel) || 'normal';
+  });
+
+  const [bookmarkedArticleIds, setBookmarkedArticleIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('lekh_bookmarks');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
       return [];
     }
+  });
+
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeReadingProgress, setActiveReadingProgress] = useState<number>(0);
+
+  // Standalone mode state for shared articles (via link copy, etc.)
+  const [isStandaloneMode, setIsStandaloneMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('standalone') === 'true' || !!params.get('article');
+    }
+    return false;
+  });
+
+  const handleExitStandalone = () => {
+    setIsStandaloneMode(false);
+    setActiveArticle(null);
+    setSearchQuery('');
+    setActiveReadingProgress(0);
+    if (typeof window !== 'undefined' && window.history.replaceState) {
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState(null, '', cleanUrl);
+    }
+  };
+
+  const [sharedArticleId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('article');
+    }
+    return null;
+  });
+
+  const [urlOtpParam] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('otp');
+    }
+    return null;
+  });
+
+  const [targetSharedArticle, setTargetSharedArticle] = useState<Article | null>(null);
+  const [isSharedArticleFetching, setIsSharedArticleFetching] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return !!params.get('article');
+    }
+    return false;
+  });
+
+  // Modals state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAdminPasswordOpen, setIsAdminPasswordOpen] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [pendingAdminAction, setPendingAdminAction] = useState<'add' | 'backup' | 'article_unlock' | null>(null);
+  const [pendingTargetArticle, setPendingTargetArticle] = useState<Article | null>(null);
+  const [pendingTargetIssueId, setPendingTargetIssueId] = useState<string | undefined>(undefined);
+  const [openOtpManagerDirectly, setOpenOtpManagerDirectly] = useState(false);
+  const [adminContactPhone, setAdminContactPhone] = useState<string>(() => {
     try {
-      const raw = localStorage.getItem(CURRENT_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Strictly exclude any spillover books (ID >= 1000)
-          const validBooks = parsed.filter((b) => !isSpilloverBook(b));
-          if (validBooks.length > 0) {
-            return validBooks.map(sanitizeBook);
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error recovering local books:', e);
-    }
-    return IMPORTED_BOOKS.map(sanitizeBook);
-  };
-
-  const [books, setBooks] = useState<Book[]>(() => {
-    return getAllLocalBooks();
+      const saved = localStorage.getItem('lekh_admin_contact_phone');
+      if (saved && saved.trim() && saved.trim() !== '9428967656') return saved.trim();
+    } catch {}
+    return '7878413535';
+  });
+  const [adminSecondaryPhone, setAdminSecondaryPhone] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('lekh_admin_secondary_phone');
+      if (saved && saved.trim()) return saved.trim();
+    } catch {}
+    return '';
   });
 
-  const [borrowers, setBorrowers] = useState<BorrowerRecord[]>(() => {
-    const saved = localStorage.getItem('my_book_collection_borrowers');
-    return saved ? JSON.parse(saved) : INITIAL_BORROWERS;
-  });
-
-  const [masters, setMasters] = useState<MasterData>(() => {
-    localStorage.removeItem('my_book_collection_masters');
-    localStorage.removeItem('my_book_collection_masters_v2');
-    localStorage.removeItem('my_book_collection_masters_v5');
-
-    const saved = localStorage.getItem('my_book_collection_masters_v10');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          return {
-            authors: Array.isArray(parsed.authors) ? parsed.authors : INITIAL_MASTERS.authors,
-            categories: Array.isArray(parsed.categories) ? parsed.categories : INITIAL_MASTERS.categories,
-            translators: Array.isArray(parsed.translators) ? parsed.translators : INITIAL_MASTERS.translators,
-            languages: Array.isArray(parsed.languages) ? parsed.languages : INITIAL_MASTERS.languages,
-            publishers: Array.isArray(parsed.publishers) ? parsed.publishers : INITIAL_MASTERS.publishers,
-            bookTypes: Array.isArray(parsed.bookTypes) ? parsed.bookTypes : INITIAL_MASTERS.bookTypes,
-          };
-        }
-      } catch (e) {
-        console.error('Error parsing masters from localStorage:', e);
-      }
-    }
-    
-    localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(INITIAL_MASTERS));
-    return INITIAL_MASTERS;
-  });
-
-  const [backups, setBackups] = useState<BackupItem[]>(() => {
-    const saved = localStorage.getItem('my_book_collection_backups');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [pdfExports, setPdfExports] = useState<PDFExportItem[]>(() => {
-    const saved = localStorage.getItem('my_book_collection_pdf_exports');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [localDirectory, setLocalDirectory] = useState<string>(() => {
-    const saved = localStorage.getItem('my_book_collection_local_dir');
-    return saved || 'D:\\My Books\\My Books';
-  });
-
-  // Helper to preserve user roles assigned by Admin
-  const sanitizeUserRole = (u: AppUser): AppUser => {
-    if (!u) return u;
-    const key = (u.username || u.id || '').toLowerCase().trim();
-    if (key === 'admin' || key === 'devdutt thaker' || key === 'devduttthaker') {
-      return { ...u, role: 'Admin' };
-    }
-    return u;
-  };
-
-  // User Authentication & Role State
-  const [currentUser, setCurrentUser] = useState<AppUser>(() => {
-    const saved = localStorage.getItem('my_book_collection_user');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return sanitizeUserRole(parsed);
-      } catch (e) {
-        console.error('Error parsing user:', e);
-      }
-    }
-    return {
-      id: 'guest_user',
-      username: 'guest',
-      name: 'Guest User',
-      role: 'User',
-    };
-  });
-
-  const [allUsers, setAllUsers] = useState<AppUser[]>(() => {
-    const saved = localStorage.getItem('my_book_collection_all_users');
-    if (saved) {
-      try {
-        const parsed: AppUser[] = JSON.parse(saved);
-        return parsed.map(sanitizeUserRole);
-      } catch (e) {
-        console.error('Error parsing saved users:', e);
-      }
-    }
-    return [];
-  });
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
-  const [currentAppIcon] = useState<string>('/favicon.svg?v=ios-color');
-
-  // UI state
-  const [languageMode, setLanguageMode] = useState<'en' | 'gu' | 'both'>('both');
-  const [searchCriterion, setSearchCriterion] = useState<SearchCriterion>('Author');
-  const [searchValue, setSearchValue] = useState<string>('');
-  const [selectedBookForIssue, setSelectedBookForIssue] = useState<Book | null>(null);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
-
-  // Theme state (light / sepia / dark mode toggle)
-  const [theme, setTheme] = useState<AppTheme>(() => {
-    const saved = localStorage.getItem('my_book_collection_theme');
-    return (saved === 'light' || saved === 'sepia' || saved === 'dark') ? (saved as AppTheme) : 'dark';
-  });
-
-  const handleSelectTheme = (newTheme: AppTheme) => {
-    setTheme(newTheme);
-    localStorage.setItem('my_book_collection_theme', newTheme);
-  };
-
-  const handleToggleTheme = () => {
-    const themeCycle: Partial<Record<AppTheme, AppTheme>> = {
-      light: 'sepia',
-      sepia: 'dark',
-      dark: 'light',
-    };
-    const nextTheme = themeCycle[theme] || 'dark';
-    handleSelectTheme(nextTheme);
-  };
-
-  // Toast alert
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  // Sync user state to localStorage and update default createdBy operator name
+  // Subscribe to Admin Contact Phone updates from Cloud
   useEffect(() => {
-    if (currentUser && currentUser.name) {
-      localStorage.setItem('my_book_collection_user', JSON.stringify(currentUser));
-      setFormData((prev) => {
-        if (!isEditing || !prev.createdBy || prev.createdBy === 'Admin') {
-          return { ...prev, createdBy: currentUser.name };
-        }
-        return prev;
-      });
-    }
-  }, [currentUser, isEditing]);
-
-  // Quota exceeded notification state (remember dismissal for current session)
-  const [quotaExceeded, setQuotaExceeded] = useState(false);
-
-  useEffect(() => {
-    setOnQuotaExceededListener(() => {
-      if (sessionStorage.getItem('my_book_collection_dismiss_quota') !== 'true') {
-        setQuotaExceeded(true);
+    const unsub = subscribeToAdminContactPhone((phone, secondary) => {
+      if (phone && phone.trim()) {
+        setAdminContactPhone(phone.trim());
       }
+      setAdminSecondaryPhone(secondary ? secondary.trim() : '');
     });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, []);
 
-  const handleDismissQuota = () => {
-    sessionStorage.setItem('my_book_collection_dismiss_quota', 'true');
-    setQuotaExceeded(false);
-  };
+  // Clear any legacy session unlock cache
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('lekh_unlocked_articles');
+    } catch {}
+  }, []);
 
-  // Modal States
-  const [isVBAModalOpen, setIsVBAModalOpen] = useState(false);
-  const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
-  const [isIssueListOpen, setIsIssueListOpen] = useState(false);
+  const [isInstallGuideOpen, setIsInstallGuideOpen] = useState(false);
+  const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
-  const [bookToDeleteId, setBookToDeleteId] = useState<string | null>(null);
-  const [pdfModalOrientation, setPdfModalOrientation] = useState<'Landscape' | 'Portrait' | null>(null);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStatisticsOpen, setIsStatisticsOpen] = useState(false);
+  const [cloudCategories, setCloudCategories] = useState<string[]>([]);
+  const [cloudAuthors, setCloudAuthors] = useState<string[]>([]);
+  const [isPullingFromCloud, setIsPullingFromCloud] = useState(false);
+  const [pullToast, setPullToast] = useState<{ message: string; isError?: boolean } | null>(null);
 
-  // Pending Excel Import Data for Append / Replace Dialog
-  const [pendingExcelData, setPendingExcelData] = useState<{
-    fileName: string;
-    parsedBooks: Book[];
-    parsedBorrowers: BorrowerRecord[];
-  } | null>(null);
+  const lastPullTimestampRef = useRef<number>(0);
 
-  // Clear Database Confirmation Dialog State
-  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
-  const [isClearingInProgress, setIsClearingInProgress] = useState(false);
+  // Directly pull all articles from Cloud Firestore and check for app updates (triggered by clicking version badge)
+  const handlePullFromCloud = async () => {
+    if (isPullingFromCloud) return;
 
-  // Capture PWA beforeinstallprompt event on mobile and PC
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
+    setIsPullingFromCloud(true);
+    setPullToast({ message: 'લેખોની સ્થિતિ તપાસી રહ્યું છે...' });
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    // Check for Service Worker updates in background
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (reg) {
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          reg.update().catch(() => {});
+        }
+      }).catch(() => {});
+    }
 
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
+    const currentTotalCount = (issues || []).reduce((acc, issue) => acc + (issue?.articles?.length || 0), 0);
+    const now = Date.now();
 
-  const handleTriggerInstall = async () => {
-    if (deferredPrompt) {
+    // 2. Anti-spam / Cooldown Guard: If clicked within 45 seconds and already has complete articles
+    if (currentTotalCount > 3 && (now - lastPullTimestampRef.current < 45 * 1000)) {
+      setIsPullingFromCloud(false);
+      setPullToast({ message: `✓ ઍપ વર્ઝન (${APP_VERSION}) અને તમામ ${currentTotalCount} લેખો એકદમ અદ્યતન છે!` });
+      setTimeout(() => setPullToast(null), 3500);
+      return;
+    }
+
+    // 3. Smart Lightweight Check (Costs ONLY 1 single read instead of 200+ reads!)
+    if (currentTotalCount > 3) {
       try {
-        deferredPrompt.prompt();
-        const choiceResult = await deferredPrompt.userChoice;
-        if (choiceResult.outcome === 'accepted') {
-          showToast('✅ બાલપદ્મ પુસ્તકાલય - રાજુલા સફળતાપૂર્વક ઇન્સ્ટોલ થઈ ગયું!');
-        }
-        setDeferredPrompt(null);
-        setIsInstallModalOpen(false);
-      } catch (err) {
-        console.error('Install prompt error:', err);
-      }
-    }
-  };
-
-  // Sync state to localStorage
-  useEffect(() => {
-    localStorage.setItem('my_book_collection_local_dir', localDirectory);
-  }, [localDirectory]);
-
-  // Sync state to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(books));
-    } catch (e) {
-      console.error('Error saving books to localStorage:', e);
-    }
-  }, [books]);
-
-  useEffect(() => {
-    localStorage.setItem('my_book_collection_borrowers', JSON.stringify(borrowers));
-  }, [borrowers]);
-
-  useEffect(() => {
-    localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(masters));
-    localStorage.setItem('my_book_collection_masters', JSON.stringify(masters));
-  }, [masters]);
-
-  useEffect(() => {
-    localStorage.setItem('my_book_collection_backups', JSON.stringify(backups));
-  }, [backups]);
-
-  useEffect(() => {
-    localStorage.setItem('my_book_collection_pdf_exports', JSON.stringify(pdfExports));
-  }, [pdfExports]);
-
-  useEffect(() => {
-    localStorage.setItem('my_book_collection_all_users', JSON.stringify(allUsers));
-  }, [allUsers]);
-
-  // Keep logged in user's role synchronized in real-time and sanitize non-admin roles
-  useEffect(() => {
-    if (currentUser && currentUser.id && currentUser.id !== 'guest_user') {
-      const sanitized = sanitizeUserRole(currentUser);
-      if (sanitized.role !== currentUser.role) {
-        setCurrentUser(sanitized);
-        localStorage.setItem('my_book_collection_user', JSON.stringify(sanitized));
-      } else {
-        const match = allUsers.find((u) => u.id === currentUser.id || u.username === currentUser.username);
-        if (match && match.role !== currentUser.role) {
-          const updated = { ...currentUser, role: match.role };
-          setCurrentUser(updated);
-          localStorage.setItem('my_book_collection_user', JSON.stringify(updated));
-        }
-      }
-    }
-  }, [allUsers, currentUser]);
-
-  // Real-time Firestore synchronization
-  useEffect(() => {
-    const unsubBooks = subscribeBooksFromFirestore((cloudBooks) => {
-      // If user has explicitly cleared the database, maintain 0 books until user imports or adds new books
-      if (localStorage.getItem('my_book_collection_is_cleared') === 'true') {
-        setBooks([]);
-        return;
-      }
-
-      // Detect and purge spillover books (ID >= 1000) from Firestore immediately
-      if (Array.isArray(cloudBooks)) {
-        const spilloverBooks = cloudBooks.filter(isSpilloverBook);
-        if (spilloverBooks.length > 0) {
-          spilloverBooks.forEach((sb) => {
-            if (sb && sb.bookId) {
-              deleteBookFromFirestore(String(sb.bookId)).catch(() => {});
-            }
-          });
-        }
-      }
-
-      // Filter cloudBooks to strictly keep valid books (ID < 1000)
-      const validCloudBooks = (cloudBooks || []).filter((b) => !isSpilloverBook(b));
-
-      const localBooks = getAllLocalBooks();
-      let merged: Book[] = [];
-
-      if (Array.isArray(validCloudBooks) && validCloudBooks.length > 0) {
-        localStorage.removeItem('my_book_collection_is_cleared');
-        const bookMap = new Map<string, Book>();
-
-        localBooks.forEach((b) => {
-          if (b && b.bookId && !isSpilloverBook(b)) {
-            bookMap.set(String(b.bookId), sanitizeBook(b));
-          }
-        });
-
-        validCloudBooks.forEach((b) => {
-          if (b && b.bookId && !isSpilloverBook(b)) {
-            bookMap.set(String(b.bookId), sanitizeBook(b));
-          }
-        });
-
-        merged = Array.from(bookMap.values()).filter((b) => !isSpilloverBook(b));
-        localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(merged));
-      } else {
-        const base = localBooks.length > 0 ? localBooks : IMPORTED_BOOKS;
-        merged = base.filter((b) => !isSpilloverBook(b)).map(sanitizeBook);
-        if (merged.length > 0 && localStorage.getItem('my_book_collection_is_cleared') !== 'true') {
-          localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(merged));
-          // Auto-seed cloud database so all 163 books are permanently stored in Firestore
-          bulkSaveBooksToFirestore(merged).catch((err) => {
-            console.warn('Sync 163 books to firestore notice:', err);
-          });
-        }
-      }
-
-      setBooks(sortBooksIndependently(merged));
-    });
-
-    const unsubMasters = subscribeMasterDataFromFirestore((cloudMasters) => {
-      if (cloudMasters && typeof cloudMasters === 'object') {
-        setMasters(cloudMasters);
-      } else {
-        setMasters(INITIAL_MASTERS);
-      }
-    });
-
-    const unsubBorrowers = subscribeBorrowersFromFirestore((cloudBorrowers) => {
-      if (cloudBorrowers && Array.isArray(cloudBorrowers)) {
-        setBorrowers(cloudBorrowers);
-      }
-    });
-
-    const unsubUsers = subscribeUsersFromFirestore((cloudUsers) => {
-      if (cloudUsers && Array.isArray(cloudUsers)) {
-        const userMap = new Map<string, AppUser>();
-        const defaultAdmin: AppUser = {
-          id: 'admin',
-          username: 'admin',
-          name: 'Devdutt Thaker',
-          role: 'Admin',
-          password: 'Malvee@0911',
-          secondaryPassword: '0911',
-        };
-        userMap.set('admin', defaultAdmin);
-
-        // Populate cloud users from Firestore (source of truth)
-        cloudUsers.forEach((u) => {
-          if (u && (u.id || u.username) && u.id !== 'guest_user') {
-            const key = (u.username || u.id).toLowerCase();
-            const validPass = (u.password && u.password.trim() !== '') ? u.password.trim() : '1234';
-
-            if (key === 'admin') {
-              userMap.set('admin', { ...defaultAdmin, ...u, role: 'Admin', password: u.password || defaultAdmin.password });
-            } else {
-              const sanitized = {
-                ...sanitizeUserRole(u),
-                password: validPass
-              };
-              userMap.set(key, sanitized);
-            }
-          }
-        });
-
-        const finalUsers = Array.from(userMap.values());
-        setAllUsers(finalUsers);
-        localStorage.setItem('my_book_collection_all_users', JSON.stringify(finalUsers));
-      }
-    });
-
-    return () => {
-      unsubBooks();
-      unsubMasters();
-      unsubBorrowers();
-      unsubUsers();
-    };
-  }, []);
-
-  // Generate Next Sequential Book ID
-  const generateNextBookID = useCallback((currentBooks: Book[]): string => {
-    if (!Array.isArray(currentBooks) || currentBooks.length === 0) return '1';
-    const numericIds = currentBooks
-      .filter((b) => b && typeof b === 'object' && b.bookId && !isSpilloverBook(b))
-      .map((b) => parseInt(String(b.bookId).replace(/\D/g, ''), 10))
-      .filter((num) => !isNaN(num) && num < 1000);
-
-    if (numericIds.length === 0) return '1';
-    const maxId = Math.max(...numericIds);
-    return String(maxId + 1);
-  }, []);
-
-  // Frame 1 Form State
-  const [formData, setFormData] = useState<Book>({
-    bookId: generateNextBookID(books),
-    bookName: '',
-    author: '',
-    category: '',
-    edition: '',
-    yearPublished: '',
-    translator: '',
-    language: '',
-    isbn: '',
-    publisher: '',
-    bookType: '',
-    rate: '',
-    remarks1: '',
-  });
-
-  // Keep form Book ID synchronized to next ID when creating new entries
-  useEffect(() => {
-    if (!isEditing) {
-      const nextId = generateNextBookID(books);
-      setFormData((prev) => {
-        if (prev.bookId !== nextId) {
-          return { ...prev, bookId: nextId };
-        }
-        return prev;
-      });
-    }
-  }, [books, isEditing, generateNextBookID]);
-
-  // 1. BTN_Reset Action
-  const handleReset = useCallback((targetBooks?: Book[]) => {
-    const booksToUse = Array.isArray(targetBooks) ? targetBooks : (Array.isArray(books) ? books : []);
-    const nextId = generateNextBookID(booksToUse);
-    setFormData({
-      bookId: nextId,
-      bookName: '',
-      author: '',
-      category: '',
-      edition: '',
-      yearPublished: '',
-      translator: '',
-      language: '',
-      isbn: '',
-      publisher: '',
-      bookType: '',
-      rate: '',
-      remarks1: '',
-      createdBy: currentUser?.name || 'Devdutt Thaker',
-    });
-    setIsEditing(false);
-    setSelectedBookForIssue(null);
-
-    // Reset search criterion and search filter input in Frame 2
-    setSearchValue('');
-    setSearchCriterion('Author');
-
-    // Set focus back to txt_BookName as required by specs
-    setTimeout(() => {
-      const el = document.getElementById('txt_BookName');
-      if (el) el.focus();
-    }, 50);
-  }, [books, generateNextBookID, currentUser]);
-
-  // Independent Sorting Function: Column A (BookID) and Column D (Category) as specified
-  const sortBooksIndependently = (arr: Book[]): Book[] => {
-    if (!Array.isArray(arr)) return [];
-    return [...arr].sort((a, b) => {
-      if (!a || !b) return 0;
-      // Primary sort: Book ID numeric
-      const idA = parseInt(String(a.bookId || '').replace(/\D/g, ''), 10) || 0;
-      const idB = parseInt(String(b.bookId || '').replace(/\D/g, ''), 10) || 0;
-      if (idA !== idB) return idA - idB;
-
-      // Secondary sort: Category / Column D
-      return (a.category || '').localeCompare(b.category || '');
-    });
-  };
-
-  // 2. BTN_Save_Update_Click Action
-  const handleSaveUpdate = () => {
-    if (currentUser?.role === 'User') {
-      alert('⚠️ મનાઈ (Permission Denied): ફક્ત Admin અને Super User ને જ પુસ્તકો ઉમેરવા અને સુધારવા (Save/Update) ની પરમિશન છે.');
-      return;
-    }
-
-    if (!formData.bookName.trim()) {
-      alert('Please enter Book Name! (મહેરબાની કરીને પુસ્તકનું નામ દાખલ કરો!)');
-      const el = document.getElementById('txt_BookName');
-      if (el) el.focus();
-      return;
-    }
-
-    const rawCreator = formData.createdBy?.trim() || currentUser?.name || 'Devdutt Thaker';
-    const recordToSave: Book = {
-      ...formData,
-      createdBy: resolveBookCreatedBy(formData.bookId, rawCreator, currentUser?.name),
-    };
-
-    // Auto-add newly entered master options (e.g. Author, Category, Publisher, Language, Translator, BookType)
-    let newMasters = { ...masters };
-    let masterChanged = false;
-
-    const checkAndAddMaster = (key: keyof MasterData, value: string) => {
-      const val = value.trim();
-      if (val && !newMasters[key].includes(val)) {
-        newMasters[key] = [...newMasters[key], val];
-        masterChanged = true;
-      }
-    };
-
-    checkAndAddMaster('authors', recordToSave.author);
-    checkAndAddMaster('translators', recordToSave.author);
-    checkAndAddMaster('categories', recordToSave.category);
-    checkAndAddMaster('publishers', recordToSave.publisher);
-    checkAndAddMaster('translators', recordToSave.translator);
-    checkAndAddMaster('authors', recordToSave.translator);
-    checkAndAddMaster('languages', recordToSave.language);
-    checkAndAddMaster('bookTypes', recordToSave.bookType);
-
-    if (masterChanged) {
-      setMasters(newMasters);
-      localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(newMasters));
-      saveMasterDataToFirestore(newMasters).catch((err) => console.warn('Firestore save masters error:', err));
-    }
-
-    let updatedBooks: Book[] = [];
-    const exists = books.some((b) => b.bookId === recordToSave.bookId);
-
-    if (exists) {
-      // Update existing record
-      updatedBooks = books.map((b) => (b.bookId === recordToSave.bookId ? { ...recordToSave } : b));
-      showToast(`Record #${recordToSave.bookId} updated successfully! (Entry By: ${recordToSave.createdBy})`);
-    } else {
-      // Append new record
-      updatedBooks = [...books, { ...recordToSave }];
-      showToast(`New book #${recordToSave.bookId} saved successfully! (Entry By: ${recordToSave.createdBy})`);
-    }
-
-    // Save book to Firestore collection
-    saveBookToFirestore(recordToSave).catch((err) => console.warn('Firestore save book error:', err));
-
-    // Perform independent sorting on Column A and Column D as per specification
-    const sorted = sortBooksIndependently(updatedBooks);
-    setBooks(sorted);
-
-    // Clear search filter so saved/updated book is immediately visible in live list
-    setSearchValue('');
-
-    // Auto-Save simulation and reset form with next sequential ID
-    handleReset(sorted);
-  };
-
-  // 3. Select Book from ListBox1
-  const handleSelectBook = (book: Book, shouldScrollToForm = false) => {
-    setFormData({
-      ...book,
-      createdBy: resolveBookCreatedBy(book.bookId, book.createdBy),
-    });
-    setIsEditing(true);
-    setSelectedBookForIssue(book);
-    if (shouldScrollToForm) {
-      const bookNameInput = document.getElementById('txt_BookName') as HTMLInputElement;
-      if (bookNameInput) {
-        bookNameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => {
-          bookNameInput.focus();
-        }, 150);
-      }
-
-      // Automatically copy local PC file path to clipboard on double-click
-      const pcPath = getPCPath(book, localDirectory);
-
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(pcPath).then(
-          () => {
-            showToast(`પુસ્તક #${book.bookId} ઓપન થયું + PC પાથ કોપી થઈ ગયો! (${pcPath})`);
-          },
-          () => {
-            showToast(`પુસ્તક #${book.bookId} (${book.bookName}) એડિટ કરવા માટે ફોર્મમાં ઓપન થયું!`);
-          }
-        );
-      } else {
-        showToast(`પુસ્તક #${book.bookId} (${book.bookName}) એડિટ કરવા માટે ફોર્મમાં ઓપન થયું!`);
-      }
-    }
-  };
-
-  // 4. Delete Book Record
-  const handleDeleteBook = (bookId: string) => {
-    if (currentUser?.role !== 'Admin') {
-      showToast('⚠️ મનાઈ (Permission Denied): લાઈબ્રેરીમાંથી પુસ્તકો Delete કરવાનો અધિકાર ફક્ત મુખ્ય Admin (Devdutt Thaker) પાસે જ છે.');
-      return;
-    }
-    setBookToDeleteId(bookId);
-  };
-
-  const handleConfirmDeleteBook = () => {
-    if (!bookToDeleteId) return;
-    const targetId = bookToDeleteId;
-    const remaining = books.filter((b) => b.bookId !== targetId);
-    setBooks(remaining);
-    deleteBookFromFirestore(targetId).catch((err) => console.warn('Firestore delete book error:', err));
-    handleReset(remaining);
-    showToast(`🗑️ Book ID #${targetId} સફળતાપૂર્વક ડિલીટ કરવામાં આવ્યું.`);
-    setBookToDeleteId(null);
-  };
-
-  const handleMaster = () => {
-    if (currentUser?.role === 'User') {
-      alert('⚠️ મનાઈ (Permission Denied): માસ્ટર ડેટા મેનેજ કરવા Admin અથવા Super User Rights હોવા જરૂરી છે.');
-      return;
-    }
-    setIsMasterModalOpen(true);
-  };
-
-  // 5. BTN_PDF_Landscape
-  const handlePDFLandscape = () => {
-    if (currentUser?.role === 'User') {
-      alert('⚠️ મનાઈ (Permission Denied): PDF Export કરવાનો અધિકાર ફક્ત Admin અને Super User પાસે છે.');
-      return;
-    }
-    setPdfModalOrientation('Landscape');
-  };
-
-  // 6. BTN_PDF_Portrait
-  const handlePDFPortrait = () => {
-    if (currentUser?.role === 'User') {
-      alert('⚠️ મનાઈ (Permission Denied): PDF Export કરવાનો અધિકાર ફક્ત Admin અને Super User પાસે છે.');
-      return;
-    }
-    setPdfModalOrientation('Portrait');
-  };
-
-  // 7. BTN_Backup Action (FSO Backup simulation)
-  const handleTriggerBackup = () => {
-    if (currentUser?.role !== 'Admin') {
-      alert('⚠️ મનાઈ (Permission Denied): બેકઅપ ફોલ્ડર ક્રિએટ કરવાનો અધિકાર ફક્ત મુખ્ય Admin પાસે છે.');
-      return;
-    }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const newBackup: BackupItem = {
-      id: 'BK-' + Date.now(),
-      timestamp: new Date().toLocaleString(),
-      fileName: `My_Book_Collection_Backup_${timestamp}.xlsm`,
-      bookCount: books.length,
-      borrowerCount: borrowers.length,
-      fileSize: '1.2 MB',
-    };
-
-    setBackups((prev) => [newBackup, ...prev]);
-    showToast(`Automated FSO Backup created in \\Backups\\ folder: ${newBackup.fileName}`);
-    setIsBackupModalOpen(true);
-  };
-
-  // 7.1 Export All-In-One JSON Database Backup (Books + Masters + Borrowers + Settings)
-  const handleExportJSON = () => {
-    if (currentUser?.role !== 'Admin') {
-      alert('⚠️ મનાઈ (Permission Denied): ડેટાબેઝ ઓલ-ઇન-વન બેકઅપ ડાઉનલોડ કરવાની પરમિશન ફક્ત મુખ્ય Admin પાસે છે.');
-      return;
-    }
-    const data = {
-      appName: 'My Book Collection',
-      version: '4.2',
-      exportDate: new Date().toISOString(),
-      summary: {
-        totalBooks: books.length,
-        totalBorrowers: borrowers.length,
-        totalMasters: {
-          authors: masters.authors?.length || 0,
-          categories: masters.categories?.length || 0,
-          translators: masters.translators?.length || 0,
-          languages: masters.languages?.length || 0,
-          publishers: masters.publishers?.length || 0,
-          bookTypes: masters.bookTypes?.length || 0,
-        },
-      },
-      books,
-      masters,
-      borrowers,
-      localDirectory,
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Full_Library_Backup_AllInOne_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(`ઓલ-ઇન-વન બેકઅપ ડાઉનલોડ થયો! (${books.length} Books, Masters & Borrowers)`);
-  };
-
-  // 7.2 Import All-In-One JSON Database Backup
-  const handleImportJSON = (file: File) => {
-    if (currentUser?.role !== 'Admin') {
-      alert('⚠️ મનાઈ (Permission Denied): ડેટા Restore કરવાનો અધિકાર ફક્ત મુખ્ય Admin પાસે છે.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string;
-        const parsed = JSON.parse(content);
-
-        if (!parsed) {
-          alert('અમાન્ય બેકઅપ ફાઈલ.');
+        const syncStatus = await checkCloudSyncStatus(currentTotalCount);
+        if (syncStatus.isUpToDate) {
+          lastPullTimestampRef.current = now;
+          setIsPullingFromCloud(false);
+          setPullToast({ message: `✓ ઍપ વર્ઝન (${APP_VERSION}) અને તમામ ${currentTotalCount} લેખો એકદમ અદ્યતન છે!` });
+          setTimeout(() => setPullToast(null), 3500);
           return;
         }
-
-        let restoredBooksCount = 0;
-        let restoredBorrowersCount = 0;
-        let restoredMastersMsg = '';
-        let cleanBooksToSave: Book[] = [];
-
-        // 1. Restore Books
-        if (Array.isArray(parsed.books)) {
-          cleanBooksToSave = parsed.books.map(sanitizeBook);
-        } else if (Array.isArray(parsed)) {
-          cleanBooksToSave = parsed.map(sanitizeBook);
-        }
-
-        if (cleanBooksToSave.length > 0) {
-          const sorted = sortBooksIndependently(cleanBooksToSave);
-          setBooks(sorted);
-          restoredBooksCount = sorted.length;
-          localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(sorted));
-          // Save all restored books to Firestore database immediately
-          bulkSaveBooksToFirestore(sorted).catch((err) => console.warn('Firestore bulkSave error:', err));
-        }
-
-        // 2. Restore Masters
-        if (parsed.masters && typeof parsed.masters === 'object') {
-          const m = parsed.masters;
-          const updatedMasters: MasterData = {
-            authors: Array.isArray(m.authors) ? m.authors : INITIAL_MASTERS.authors,
-            categories: Array.isArray(m.categories) ? m.categories : INITIAL_MASTERS.categories,
-            translators: Array.isArray(m.translators) ? m.translators : INITIAL_MASTERS.translators,
-            languages: Array.isArray(m.languages) ? m.languages : INITIAL_MASTERS.languages,
-            publishers: Array.isArray(m.publishers) ? m.publishers : INITIAL_MASTERS.publishers,
-            bookTypes: Array.isArray(m.bookTypes) ? m.bookTypes : INITIAL_MASTERS.bookTypes,
-          };
-          setMasters(updatedMasters);
-          localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(updatedMasters));
-          saveMasterDataToFirestore(updatedMasters).catch((err) => console.warn('Firestore save masters error:', err));
-          restoredMastersMsg = `, Masters`;
-        }
-
-        // 3. Restore Borrowers & Issues
-        if (Array.isArray(parsed.borrowers)) {
-          setBorrowers(parsed.borrowers);
-          localStorage.setItem('my_book_collection_borrowers', JSON.stringify(parsed.borrowers));
-          restoredBorrowersCount = parsed.borrowers.length;
-        }
-
-        // 4. Restore local directory if present
-        if (parsed.localDirectory && typeof parsed.localDirectory === 'string') {
-          setLocalDirectory(parsed.localDirectory);
-          localStorage.setItem('my_book_collection_local_dir', parsed.localDirectory);
-        }
-
-        showToast(
-          `સંપૂર્ણ Restore સફળ! (${restoredBooksCount} પુસ્તકો${restoredMastersMsg}, ${restoredBorrowersCount} ઇશ્યૂ રેકોર્ડ્સ)`
-        );
-      } catch (err) {
-        console.error(err);
-        alert('બેકઅપ ફાઈલ ઓપન કરવામાં ભૂલ આવી.');
+      } catch {
+        // Fallback to fetch if check encounters unexpected network issue
       }
+    }
+
+    setPullToast({ message: 'ક્લાઉડમાંથી તમામ લેખો લાવી રહ્યું છે...' });
+
+    // Clear stale PWA service worker caches
+    if (typeof caches !== 'undefined') {
+      caches.keys().then((keys) => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
+    }
+
+    try {
+      const cloudIssues = await fetchIssuesFromCloud();
+      if (cloudIssues && cloudIssues.length > 0) {
+        lastPullTimestampRef.current = Date.now();
+        setIssues(cloudIssues);
+        if (!cloudIssues.some(i => i.id === selectedIssueId)) {
+          setSelectedIssueId(cloudIssues[0].id);
+        }
+        try {
+          localStorage.setItem('lekh_sangrah_issues', JSON.stringify(cloudIssues));
+          localStorage.setItem('lekh_sangrah_cached_version', String(Date.now()));
+          localStorage.setItem('lekh_sangrah_last_sync_check', String(Date.now()));
+        } catch (e) {
+          console.error('Failed to store cloud issues locally:', e);
+        }
+        const freshCount = cloudIssues.reduce((acc, issue) => acc + (issue?.articles?.length || 0), 0);
+        setPullToast({ message: `✓ ક્લાઉડમાંથી તમામ ${freshCount} લેખો સફળતાપૂર્વક મેળવી લીધા!` });
+        setTimeout(() => setPullToast(null), 4000);
+      } else {
+        setPullToast({ message: 'ક્લાઉડમાં કોઈ લેખો મળ્યા નથી.', isError: true });
+        setTimeout(() => setPullToast(null), 4000);
+      }
+    } catch (err: any) {
+      console.error('Pull from cloud failed:', err);
+      setPullToast({ message: 'ક્લાઉડમાંથી ડેટા મેળવવામાં ક્ષતિ આવી. ફરી પ્રયાસ કરો.', isError: true });
+      setTimeout(() => setPullToast(null), 4000);
+    } finally {
+      setIsPullingFromCloud(false);
+    }
+  };
+  const [visitorCount, setVisitorCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('lekh_visitor_count');
+      return saved ? parseInt(saved, 10) : 108;
+    } catch {
+      return 108;
+    }
+  });
+
+  useEffect(() => {
+    recordVisitorHit();
+    const unsub = subscribeToVisitorCount((count) => {
+      if (typeof count === 'number' && count > 0) {
+        setVisitorCount(count);
+        try {
+          localStorage.setItem('lekh_visitor_count', count.toString());
+        } catch {
+          // ignore
+        }
+      }
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
     };
-    reader.readAsText(file);
-  };
+  }, []);
 
-  // 7.3 Load Sample Literary Books Option
-  const handleRestoreDefaultBooks = () => {
-    if (currentUser?.role !== 'Admin') {
-      alert('⚠️ મનાઈ (Permission Denied): Sample Books લોડ કરવાનો અધિકાર ફક્ત મુખ્ય Admin પાસે છે.');
-      return;
+  // Update article OTPs in local issues state, active article state, and pendingTargetArticle - and sync to Cloud
+  const handleUpdateArticleOtps = (articleId: string, updatedOtps: string[]) => {
+    setIssues((prevIssues) =>
+      prevIssues.map((iss) => ({
+        ...iss,
+        articles: (iss.articles || []).map((art) => {
+          if (art.id === articleId) {
+            return {
+              ...art,
+              oneTimePasscodes: updatedOtps,
+            };
+          }
+          return art;
+        }),
+      }))
+    );
+
+    if (activeArticle && activeArticle.id === articleId) {
+      setActiveArticle((prev) => (prev ? { ...prev, oneTimePasscodes: updatedOtps } : null));
     }
-    const cleanDefault = SAMPLE_BOOKS.map(sanitizeBook);
-    setBooks(cleanDefault);
-    bulkSaveBooksToFirestore(cleanDefault).catch((err) => console.warn('Firestore bulk save sample books:', err));
-    showToast(`૧૦૦ નમૂનાના સાહિત્યિક પુસ્તકો લોડ થયા છે (${cleanDefault.length} Sample Books)`);
-  };
-
-  const handleOpenBackups = () => {
-    if (currentUser?.role !== 'Admin') {
-      alert('⚠️ મનાઈ (Permission Denied): બેકઅપ ફોલ્ડર અને લોગ્સ જોવાનો અધિકાર ફક્ત મુખ્ય Admin પાસે છે.');
-      return;
-    }
-    setIsBackupModalOpen(true);
-  };
-
-  // 8. Issue Book Handler
-  const handleIssueBook = async (borrowerData: Omit<BorrowerRecord, 'issueId' | 'status'>) => {
-    if (currentUser?.role === 'User') {
-      alert('⚠️ મનાઈ (Permission Denied): પુસ્તક ઇશ્યૂ કરવાની પરમિશન ફક્ત Admin અને Super User પાસે છે.');
-      return;
+    if (pendingTargetArticle && pendingTargetArticle.id === articleId) {
+      setPendingTargetArticle((prev) => (prev ? { ...prev, oneTimePasscodes: updatedOtps } : null));
     }
 
-    const issueId = 'ISS-' + String(borrowers.length + 101).padStart(3, '0');
-    const newRecord: BorrowerRecord = {
-      ...borrowerData,
-      issueId,
-      status: 'Issued',
+    // Directly sync updated OTPs to Cloud Firestore
+    const targetArt = (issues || []).flatMap((iss) => iss.articles || []).find((a) => a.id === articleId);
+    if (targetArt) {
+      saveSingleArticleToCloud('collection-main', { ...targetArt, oneTimePasscodes: updatedOtps }).catch((err) => {
+        console.warn('Failed to sync updated OTPs to cloud:', err);
+      });
+    }
+  };
+
+  const handleProgressChange = useCallback((prog: number) => {
+    setActiveReadingProgress((prev) => (prev === prog ? prev : prog));
+  }, []);
+
+  const totalArticlesCount = useMemo(() => {
+    return (issues || []).reduce((acc, issue) => acc + (issue?.articles || []).filter((a) => !a.isHidden).length, 0);
+  }, [issues]);
+
+  const handleSelectArticle = (article: Article, issueId?: string) => {
+    if (issueId) {
+      setSelectedIssueId(issueId);
+    }
+    // Always prompt for password if the article is password protected
+    if (article.isPasswordProtected) {
+      setPendingTargetArticle(article);
+      setPendingTargetIssueId(issueId);
+      setPendingAdminAction('article_unlock');
+      setIsAdminPasswordOpen(true);
+      return;
+    }
+    setActiveArticle(article);
+  };
+
+  // Keep activeArticle in sync with updated issues (e.g. when fresh content arrives from Cloud)
+  useEffect(() => {
+    if (!activeArticle) return;
+    for (const issue of issues) {
+      const fresh = (issue.articles || []).find((a) => a.id === activeArticle.id);
+      if (fresh) {
+        const isDifferent =
+          fresh.content !== activeArticle.content ||
+          fresh.title !== activeArticle.title ||
+          (fresh.updatedAt || 0) !== (activeArticle.updatedAt || 0) ||
+          fresh.author !== activeArticle.author ||
+          Boolean(fresh.isPasswordProtected) !== Boolean(activeArticle.isPasswordProtected) ||
+          Boolean(fresh.copyEnable) !== Boolean(activeArticle.copyEnable);
+        if (isDifferent) {
+          setActiveArticle(fresh);
+        }
+        break;
+      }
+    }
+  }, [issues, activeArticle?.id, activeArticle?.updatedAt]);
+
+  // Track if shared article has already been auto-opened to prevent continuous loop
+  const handledSharedArticleIdRef = useRef<string | null>(null);
+  const handledAdminOtpArticleIdRef = useRef<string | null>(null);
+
+  // Auto-open Admin OTP generator if admin arrived via WhatsApp request link
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const adminOtpArticleId = searchParams.get('adminOtpArticleId');
+    if (!adminOtpArticleId) return;
+    if (handledAdminOtpArticleIdRef.current === adminOtpArticleId) return;
+    handledAdminOtpArticleIdRef.current = adminOtpArticleId;
+
+    // Clean up query param from URL so refresh is clean
+    try {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('adminOtpArticleId');
+      window.history.replaceState(null, '', cleanUrl.toString());
+    } catch {}
+
+    const openForArticle = (art: Article, issueId?: string) => {
+      setPendingTargetArticle(art);
+      if (issueId) setPendingTargetIssueId(issueId);
+      setPendingAdminAction('article_unlock');
+      setOpenOtpManagerDirectly(true);
+      setIsAdminPasswordOpen(true);
     };
 
-    setBorrowers((prev) => [newRecord, ...prev]);
-    setBooks((prev) =>
-      prev.map((b) =>
-        b.bookId === borrowerData.bookId
-          ? {
-              ...b,
-              isIssued: true,
-              currentBorrowerName: borrowerData.borrowerName,
-              currentIssueDueDate: formatDateToDDMMYYYY(borrowerData.dueDate) || borrowerData.dueDate,
+    let foundArt: Article | undefined;
+    let foundIssId: string | undefined;
+
+    for (const iss of issues) {
+      const art = (iss.articles || []).find((a) => a.id === adminOtpArticleId);
+      if (art) {
+        foundArt = art;
+        foundIssId = iss.id;
+        break;
+      }
+    }
+
+    if (foundArt) {
+      openForArticle(foundArt, foundIssId);
+    } else {
+      fetchSingleArticleFromCloud(adminOtpArticleId)
+        .then((cloudArt) => {
+          if (cloudArt) {
+            openForArticle(cloudArt);
+          }
+        })
+        .catch((err) => {
+          console.warn('Could not fetch article for admin OTP link:', err);
+        });
+    }
+  }, [issues]);
+
+  // Auto-open shared article (e.g. from WhatsApp link)
+  useEffect(() => {
+    if (!sharedArticleId) return;
+    if (handledSharedArticleIdRef.current === sharedArticleId) return;
+    // Set ref immediately to block duplicate execution while async fetch is in progress
+    handledSharedArticleIdRef.current = sharedArticleId;
+
+    let foundArticle: Article | undefined;
+    let foundIssueId: string | undefined;
+
+    for (const iss of issues) {
+      const art = (iss.articles || []).find((a) => a.id === sharedArticleId);
+      if (art) {
+        foundArticle = art;
+        foundIssueId = iss.id;
+        break;
+      }
+    }
+
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const urlOtp = searchParams ? searchParams.get('otp') : null;
+
+    const tryUnlockWithUrlOtp = async (art: Article): Promise<boolean> => {
+      if (!urlOtp || !art.isPasswordProtected) return false;
+      const cleanUrlOtp = cleanAndNormalizeCode(urlOtp);
+      const smartCheck = verifySmartArticleOtp(art.id, cleanUrlOtp);
+      const isLocalOtp = (art.oneTimePasscodes || []).some(o => cleanAndNormalizeCode(o) === cleanUrlOtp);
+      const isPassword = !!(art.password && cleanAndNormalizeCode(art.password) === cleanUrlOtp);
+      if (smartCheck.valid || isLocalOtp || isPassword) {
+        if (smartCheck.valid || isLocalOtp) {
+          burnOtpLocally(art.id, cleanUrlOtp);
+          burnArticleOtpInCloud(art.id, cleanUrlOtp).catch(() => {});
+        }
+        setActiveArticle(art);
+        try {
+          const cleanUrl = window.location.origin + window.location.pathname + '?article=' + encodeURIComponent(art.id);
+          window.history.replaceState(null, '', cleanUrl);
+        } catch {}
+        return true;
+      }
+
+      // If local/smart check doesn't match yet, check live Cloud Firestore directly!
+      try {
+        const cloudResult = await verifyAndBurnArticleOtpInCloud(art.id, cleanUrlOtp);
+        if (cloudResult.success) {
+          setActiveArticle(art);
+          try {
+            const cleanUrl = window.location.origin + window.location.pathname + '?article=' + encodeURIComponent(art.id);
+            window.history.replaceState(null, '', cleanUrl);
+          } catch {}
+          return true;
+        }
+      } catch (err) {
+        console.warn('URL OTP cloud verification note:', err);
+      }
+
+      return false;
+    };
+
+    if (foundArticle) {
+      setTargetSharedArticle(foundArticle);
+      setIsSharedArticleFetching(false);
+      if (foundIssueId) setSelectedIssueId(foundIssueId);
+      tryUnlockWithUrlOtp(foundArticle).then((unlocked) => {
+        if (!unlocked) {
+          handleSelectArticle(foundArticle!, foundIssueId);
+        }
+      });
+    } else {
+      fetchSingleArticleFromCloud(sharedArticleId)
+        .then(async (cloudArt) => {
+          setIsSharedArticleFetching(false);
+          if (cloudArt) {
+            setTargetSharedArticle(cloudArt);
+            const unlocked = await tryUnlockWithUrlOtp(cloudArt);
+            if (!unlocked) {
+              handleSelectArticle(cloudArt);
             }
-          : b
-      )
-    );
-
-    try {
-      await issueBookInFirestore(newRecord);
-    } catch (err) {
-      console.warn('Firestore issueBook error:', err);
+          }
+        })
+        .catch((err) => {
+          setIsSharedArticleFetching(false);
+          console.warn('Could not load shared article from cloud:', err);
+        });
     }
+  }, [sharedArticleId, issues]);
 
-    showToast(`Book #${borrowerData.bookId} issued to ${borrowerData.borrowerName} (${issueId})`);
+  // In standalone mode, lock history so clicking browser back does not exit to main page
+  useEffect(() => {
+    if (isStandaloneMode && (activeArticle || targetSharedArticle)) {
+      window.history.pushState(null, '', window.location.href);
+      const handlePopState = () => {
+        window.history.pushState(null, '', window.location.href);
+      };
+      window.addEventListener('popstate', handlePopState);
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [isStandaloneMode, activeArticle, targetSharedArticle]);
+
+  const handleOpenAddArticle = () => {
+    if (isAdminAuthenticated) {
+      setIsAddModalOpen(true);
+    } else {
+      setPendingAdminAction('add');
+      setIsAdminPasswordOpen(true);
+    }
   };
 
-  // 9. Return Book Handler
-  const handleReturnBook = async (issueId: string) => {
-    if (currentUser?.role === 'User') {
-      alert('⚠️ મનાઈ (Permission Denied): પુસ્તક જમા (Return) કરવાની પરમિશન ફક્ત Admin અને Super User પાસે છે.');
-      return;
-    }
-
-    const targetBorrower = borrowers.find((b) => b.issueId === issueId);
-    setBorrowers((prev) =>
-      prev.map((b) =>
-        b.issueId === issueId
-          ? { ...b, status: 'Returned', returnDate: getTodayDDMMYYYY() }
-          : b
-      )
-    );
-
-    if (targetBorrower) {
-      setBooks((prev) =>
-        prev.map((b) =>
-          b.bookId === targetBorrower.bookId
-            ? { ...b, isIssued: false, currentBorrowerName: '', currentIssueDueDate: '' }
-            : b
-        )
-      );
-    }
-
-    try {
-      await returnBookInFirestore(issueId, targetBorrower?.bookId);
-    } catch (err) {
-      console.warn('Firestore returnBook error:', err);
-    }
-
-    showToast(`Book return recorded for Issue ID #${issueId}`);
+  const handleOpenBackup = () => {
+    // Always require admin password for opening Backup & Database modal
+    setPendingAdminAction('backup');
+    setIsAdminPasswordOpen(true);
   };
 
-  // 9.1 Delete Borrower Record Handler (Admin & Super User only)
-  const handleDeleteBorrowerRecord = async (issueId: string) => {
-    const roleLower = (currentUser?.role || '').toLowerCase().trim();
-    const userLower = (currentUser?.username || '').toLowerCase().trim();
-    const isAllowed = roleLower === 'admin' || roleLower === 'super user' || roleLower === 'superuser' || userLower === 'admin' || userLower === 'devdutt thaker';
-    if (!isAllowed) {
-      alert('⚠️ મનાઈ (Permission Denied): આ એન્ટ્રી ડિલીટ કરવાની પરમિશન ફક્ત Admin અને Super User પાસે જ છે. User આ એન્ટ્રી ડિલીટ કરી શકતા નથી.');
-      return;
-    }
+  // Sync to local storage
+  useEffect(() => {
+    localStorage.setItem('lekh_sangrah_issues', JSON.stringify(issues));
+  }, [issues]);
 
-    const targetBorrower = borrowers.find((b) => b.issueId === issueId);
-    if (!targetBorrower) return;
+  // Real-time synchronization with Google Cloud Firestore
+  useEffect(() => {
+    let isInitial = true;
+    const unsubscribe = subscribeToIssues(
+      (cloudIssues) => {
+        setIsInitialLoading(false);
+        if (cloudIssues && cloudIssues.length > 0) {
+          const cloudArtsMap = new Map<string, Article>();
+          cloudIssues.forEach((iss) => {
+            (iss.articles || []).forEach((a) => cloudArtsMap.set(a.id, a));
+          });
 
-    const wasIssued = targetBorrower.status === 'Issued';
-    const bookId = targetBorrower.bookId;
+          setIssues((prevIssues) => {
+            const deletedIds = getDeletedArticleIds();
+            const merged = mergeIssuesSafely(prevIssues, cloudIssues, deletedIds);
+            if (areIssuesEqual(prevIssues, merged)) {
+              return prevIssues; // Bails out to prevent render loops
+            }
+            try {
+              localStorage.setItem('lekh_sangrah_issues', JSON.stringify(merged));
+            } catch (e) {
+              console.error('Failed to cache cloud issues locally:', e);
+            }
+            return merged;
+          });
 
-    // Remove from local borrowers state and localStorage
-    setBorrowers((prev) => {
-      const updated = prev.filter((b) => b.issueId !== issueId);
-      localStorage.setItem('my_book_collection_borrowers', JSON.stringify(updated));
-      return updated;
+          // If the reader currently has an article open that was deleted from another device, safely return to list
+          setActiveArticle((currentActive) => {
+            if (!currentActive) return null;
+            const deletedSet = getDeletedArticleIds();
+            if (deletedSet.has(currentActive.id)) return null;
+            return currentActive;
+          });
+
+          setCloudSyncStatus('connected');
+        } else {
+          setCloudSyncStatus('connected');
+        }
+        isInitial = false;
+      },
+      (err) => {
+        setIsInitialLoading(false);
+        console.warn('Firestore subscription notice (running local mode):', err);
+        setCloudSyncStatus('offline');
+      }
+    );
+
+    // Also subscribe to custom categories from Cloud Firestore in real time
+    const unsubCategories = subscribeToCustomCategories((cloudCats) => {
+      if (cloudCats && cloudCats.length > 0) {
+        setCloudCategories((prev) => {
+          if (prev.length === cloudCats.length && prev.every((c, i) => c === cloudCats[i])) return prev;
+          return cloudCats;
+        });
+        saveCustomCategoriesBatch(cloudCats);
+      }
     });
 
-    // If the book was currently issued under this record, release it back to available
-    if (wasIssued && bookId) {
-      setBooks((prev) => {
-        const updated = prev.map((b) =>
-          b.bookId === bookId
-            ? { ...b, isIssued: false, currentBorrowerName: '', currentIssueDueDate: '' }
-            : b
-        );
-        localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(updated));
-        return updated;
+    // Also subscribe to custom authors from Cloud Firestore in real time
+    const unsubAuthors = subscribeToCustomAuthors((cloudAuths) => {
+      if (cloudAuths && cloudAuths.length > 0) {
+        setCloudAuthors((prev) => {
+          if (prev.length === cloudAuths.length && prev.every((a, i) => a === cloudAuths[i])) return prev;
+          return cloudAuths;
+        });
+        saveCustomAuthorsBatch(cloudAuths);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      unsubCategories();
+      unsubAuthors();
+    };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('lekh_reading_theme', readingTheme);
+    // Apply dark or theme-sepia class to document root
+    if (readingTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('theme-sepia');
+    } else if (readingTheme === 'sepia') {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('theme-sepia');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.remove('theme-sepia');
+    }
+  }, [readingTheme]);
+
+  useEffect(() => {
+    localStorage.setItem('lekh_font_size', fontSize);
+  }, [fontSize]);
+
+  useEffect(() => {
+    localStorage.setItem('lekh_bookmarks', JSON.stringify(bookmarkedArticleIds));
+  }, [bookmarkedArticleIds]);
+
+  // Current selected issue
+  const currentIssue = useMemo(() => {
+    return issues.find(i => i.id === selectedIssueId) || issues[0];
+  }, [issues, selectedIssueId]);
+
+  // Toggle bookmark handler
+  const handleToggleBookmark = (articleId: string) => {
+    setBookmarkedArticleIds(prev => 
+      prev.includes(articleId) ? prev.filter(id => id !== articleId) : [...prev, articleId]
+    );
+  };
+
+  // Add or update weekly issue handler
+  // syncMode: 'meta-only' (when individual articles already saved via saveSingleArticleToCloud) | 'full' (when new issue created or reordering) | 'local-only'
+  const handleSaveNewIssue = (newIssue: WeeklyIssue, syncMode: 'meta-only' | 'full' | 'local-only' = 'meta-only') => {
+    const safeIssue: WeeklyIssue = {
+      ...newIssue,
+      id: newIssue.id || 'collection-main',
+    };
+    setIssues(prev => {
+      const exists = prev.some(i => i.id === safeIssue.id);
+      const updated = exists
+        ? prev.map(i => i.id === safeIssue.id ? safeIssue : i)
+        : [safeIssue, ...prev.filter(i => i.id !== 'collection-main')];
+      // CRITICAL: Synchronously save to localStorage immediately so F5 never loses data
+      try {
+        localStorage.setItem('lekh_sangrah_issues', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Failed to sync to localStorage:', err);
+      }
+      return updated;
+    });
+    setSelectedIssueId(safeIssue.id);
+    if (activeArticle) {
+      const updatedActive = safeIssue.articles.find(a => a.id === activeArticle.id);
+      if (updatedActive) setActiveArticle(updatedActive);
+    }
+
+    setCloudSyncStatus('syncing');
+    const cloudPromise = syncMode === 'full' 
+      ? saveIssueToCloud(safeIssue)
+      : saveIssueMetadataToCloud(safeIssue);
+
+    cloudPromise
+      .then(() => setCloudSyncStatus('connected'))
+      .catch((err) => {
+        console.error('Failed to sync issue to cloud:', err);
+        setCloudSyncStatus('offline');
+      });
+  };
+
+  // Reset to default sample issues
+  const handleResetToDefaults = () => {
+    setIssues(INITIAL_ISSUES);
+    setSelectedIssueId(INITIAL_ISSUES[0].id);
+    setActiveArticle(null);
+  };
+
+  // Helper to count occurrences of a query word in text
+  const countOccurrences = (text: string, query: string): number => {
+    if (!text || !query.trim()) return 0;
+    try {
+      const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'gi');
+      const matches = text.match(regex);
+      return matches ? matches.length : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Search results across all issues with occurrence count per article
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return null;
+
+    const results: { 
+      issue: WeeklyIssue; 
+      article: Article; 
+      matchCount: number;
+    }[] = [];
+
+    (issues || []).forEach(issue => {
+      (issue.articles || []).forEach(article => {
+        if (article.isHidden) return; // Hidden articles do not appear in reader search
+        const titleCount = countOccurrences(article?.title, q);
+        const contentCount = countOccurrences(article?.content, q);
+        const summaryCount = countOccurrences(article?.summary, q);
+        const authorCount = countOccurrences(article?.author, q);
+        const tagsCount = Array.isArray(article?.tags)
+          ? article.tags.reduce((acc, tag) => acc + countOccurrences(tag, q), 0)
+          : 0;
+
+        const totalCount = titleCount + contentCount + summaryCount + authorCount + tagsCount;
+
+        if (totalCount > 0) {
+          results.push({ 
+            issue, 
+            article, 
+            matchCount: totalCount 
+          });
+        }
+      });
+    });
+
+    // Sort by matchCount descending so articles with highest occurrences appear first
+    results.sort((a, b) => b.matchCount - a.matchCount);
+
+    return results;
+  }, [issues, searchQuery]);
+
+  // Total occurrences across all matching articles
+  const totalSearchOccurrences = useMemo(() => {
+    if (!Array.isArray(searchResults)) return 0;
+    return searchResults.reduce((acc, item) => acc + (item?.matchCount || 0), 0);
+  }, [searchResults]);
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    if (query.trim() && activeArticle) {
+      setActiveArticle(null);
+    }
+  };
+
+  // Active Category Tab for main list (e.g. ALL, Top Topics by count, અન્ય)
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('ALL');
+
+  // Compute dynamic category tabs:
+  // 1. ALL is mandatory (always first) with total count.
+  // 2. Core priority topics requested by user: 'વિવર્તન', 'વિસ્મય', 'રાજુલા', 'We the readers'
+  // 3. Dynamic active topics (e.g. NEWS360, XYZ) with significant articles
+  // 4. Removed legacy categories (e.g. 'ગુજરાત સમાચાર રવિપૂર્તિ') and minor categories are NOT given separate tabs — they belong in 'અન્ય'!
+  // 5. Sorted strictly descending by article count so active topics bubble up automatically!
+  // 6. 'અન્ય' is strictly MANDATORY and ALWAYS LAST ("છેલ્લે અન્ય રાખવાનું ફરજીયાત છે")
+  const categoryTabsData = useMemo(() => {
+    const rawArticles = currentIssue?.articles || [];
+    const visibleArticles = rawArticles.filter((art) => !art.isHidden);
+    return computeCategoryTabsData(visibleArticles);
+  }, [currentIssue]);
+
+  // Filtered articles based on selected category tab
+  const displayedArticles = useMemo(() => {
+    const rawArticles = currentIssue?.articles || [];
+    const articles = rawArticles.filter((art) => !art.isHidden);
+    if (selectedCategoryTab === 'ALL') return articles;
+
+    if (selectedCategoryTab === 'અન્ય') {
+      return articles.filter((art) => {
+        const cat = (art.category || '').trim();
+        for (const qId of categoryTabsData.qualifyingKeys) {
+          if (categoryTabsData.matchCategory(qId, cat)) {
+            return false;
+          }
+        }
+        return true;
       });
     }
 
-    try {
-      await deleteBorrowerInFirestore(issueId, bookId, wasIssued);
-    } catch (err) {
-      console.warn('Firestore deleteBorrower error:', err);
-    }
-
-    showToast(`🗑️ Issue એન્ટ્રી #${issueId} (${targetBorrower.borrowerName}) ડિલીટ થઈ ગઈ છે.`);
-  };
-
-  // 10. Export Excel Database file
-  const handleExportDatabaseExcel = () => {
-    if (currentUser?.role === 'User') {
-      alert('⚠️ મનાઈ (Permission Denied): Excel Export ડાઉનલોડ કરવાનો અધિકાર ફક્ત Admin અને Super User પાસે છે.');
-      return;
-    }
-    exportDatabaseToExcel(books, borrowers, currentUser?.role === 'Admin');
-    showToast('Database.xlsx ફાઈલ સફળતાપૂર્વક ડાઉનલોડ થઈ ગઈ છે.');
-  };
-
-  // Synchronize new master options from imported books
-  const syncMastersFromNewBooks = (newBooks: Book[]) => {
-    let newMasters = { ...masters };
-    let changed = false;
-
-    const addUnique = (key: keyof MasterData, val: string | undefined) => {
-      const trimmed = (val || '').trim();
-      if (trimmed && !newMasters[key].includes(trimmed)) {
-        newMasters[key] = [...newMasters[key], trimmed];
-        changed = true;
-      }
-    };
-
-    newBooks.forEach((b) => {
-      addUnique('authors', b.author);
-      addUnique('categories', b.category);
-      addUnique('publishers', b.publisher);
-      addUnique('translators', b.translator);
-      addUnique('languages', b.language);
-      addUnique('bookTypes', b.bookType);
+    return articles.filter((art) => {
+      const cat = (art.category || '').trim();
+      return categoryTabsData.matchCategory(selectedCategoryTab, cat);
     });
-
-    if (changed) {
-      setMasters(newMasters);
-      localStorage.setItem('my_book_collection_masters_v10', JSON.stringify(newMasters));
-      saveMasterDataToFirestore(newMasters).catch((err) => console.warn('Firestore save masters error:', err));
-    }
-  };
-
-  // 10.1 Fresh Import (when database is empty, or when user chooses Replace)
-  const handleExecuteFreshImport = (importedBooks: Book[], importedBorrowers: BorrowerRecord[], fileName: string) => {
-    localStorage.removeItem('my_book_collection_is_cleared');
-    let autoId = 1;
-    const sanitizedBooks = importedBooks.map((b) => {
-      const sanitized = sanitizeBook(b);
-      const cleanId = (sanitized.bookId || '').trim();
-      return {
-        ...sanitized,
-        bookId: cleanId ? cleanId : String(autoId++),
-      };
-    });
-    const sorted = sortBooksIndependently(sanitizedBooks);
-    setBooks(sorted);
-    localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(sorted));
-    bulkSaveBooksToFirestore(sorted).catch((err) => console.warn('Firestore import Excel error:', err));
-    syncMastersFromNewBooks(sorted);
-
-    if (importedBorrowers && importedBorrowers.length > 0) {
-      setBorrowers(importedBorrowers);
-      localStorage.setItem('my_book_collection_borrowers', JSON.stringify(importedBorrowers));
-    }
-
-    setSearchValue('');
-    handleReset(sorted);
-    showToast(`✅ સફળતાપૂર્વક ${sorted.length} પુસ્તકોનો નવો ડેટાબેઝ ઈમ્પોર્ટ થયો! (${fileName})`);
-  };
-
-  // 10.2 Append Import: Arranges imported books BELOW existing data with sequential IDs
-  const handleExecuteAppendImport = (importedBooks: Book[], importedBorrowers: BorrowerRecord[], fileName: string) => {
-    localStorage.removeItem('my_book_collection_is_cleared');
-
-    // Find highest numeric ID in existing books
-    const maxExistingId = books.reduce((max, b) => {
-      const num = parseInt(String(b.bookId || '').replace(/\D/g, ''), 10);
-      return !isNaN(num) && num > max ? num : max;
-    }, 0);
-
-    let nextSeqId = maxExistingId + 1;
-    const newBooksFormatted = importedBooks.map((rawB) => {
-      const sanitized = sanitizeBook(rawB);
-      const assignedId = String(nextSeqId++);
-      return {
-        ...sanitized,
-        bookId: assignedId,
-      };
-    });
-
-    const combinedBooks = [...books, ...newBooksFormatted];
-    const sorted = sortBooksIndependently(combinedBooks);
-    setBooks(sorted);
-    localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(sorted));
-
-    // Save only the newly appended books to Firestore
-    bulkSaveBooksToFirestore(newBooksFormatted).catch((err) => console.warn('Firestore append Excel error:', err));
-    syncMastersFromNewBooks(newBooksFormatted);
-
-    if (importedBorrowers && importedBorrowers.length > 0) {
-      const combinedBorrowers = [...borrowers, ...importedBorrowers];
-      setBorrowers(combinedBorrowers);
-      localStorage.setItem('my_book_collection_borrowers', JSON.stringify(combinedBorrowers));
-    }
-
-    setSearchValue('');
-    handleReset(sorted);
-    setPendingExcelData(null);
-    showToast(`✅ ${newBooksFormatted.length} નવા પુસ્તકો હાલના ડેટા નીચે (#${maxExistingId + 1} થી #${nextSeqId - 1}) ઉમેરાયા! (હવે કુલ: ${sorted.length} પુસ્તકો)`);
-  };
-
-  // 10.3 Replace Import Confirmation Execution
-  const handleExecuteReplaceImport = async (importedBooks: Book[], importedBorrowers: BorrowerRecord[], fileName: string) => {
-    setPendingExcelData(null);
-    showToast('જૂનો ડેટા સાફ થઈ રહ્યો છે અને નવી ફાઈલ સેટ થઈ રહી છે...');
-    await clearAllBooksInFirestore(books);
-    handleExecuteFreshImport(importedBooks, importedBorrowers, fileName);
-  };
-
-  // 10.4 Import Excel Database file
-  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (currentUser?.role !== 'Admin') {
-      alert('⚠️ મનાઈ (Permission Denied): Excel Import કરવાની સુવિધા ફક્ત Admin માટે જ ઉપલબ્ધ છે.');
-      return;
-    }
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Reset file input so user can re-select same file if needed
-    e.target.value = '';
-
-    try {
-      showToast(`Excel ફાઈલ તપાસાઈ રહી છે: ${file.name}...`);
-      const parsed = await parseExcelFile(file);
-      if (!parsed.books || parsed.books.length === 0) {
-        alert('આ Excel ફાઈલમાં કોઈ પુસ્તકનો ડેટા મળ્યો નથી. કૃપા કરીને પ્રથમ હરોળમાં હેડર (Book Name, Author વગેરે) તપાસો.');
-        return;
-      }
-
-      // If library currently has 0 books, directly import as fresh database
-      if (books.length === 0) {
-        handleExecuteFreshImport(parsed.books, parsed.borrowers, file.name);
-      } else {
-        // Library already has books: open modal to ask whether to Append below existing data or Replace
-        setPendingExcelData({
-          fileName: file.name,
-          parsedBooks: parsed.books,
-          parsedBorrowers: parsed.borrowers,
-        });
-      }
-    } catch (err) {
-      alert('Excel ફાઈલ ઈમ્પોર્ટમાં ભૂલ: ' + (err as Error).message);
-    }
-  };
-
-  // 11. Google Sheet Link Sync Handler
-  const handleSyncGoogleSheet = async () => {
-    if (currentUser?.role === 'User') {
-      alert('⚠️ મનાઈ (Permission Denied): Google Sheet Sync કરવાની પરમિશન ફક્ત Admin પાસે છે.');
-      return;
-    }
-    const url = prompt(
-      'ગુગલ શીટ લિંક પેસ્ટ કરો (Paste Google Sheet Link or Published CSV Link):\n\nનોંધ: ગૂગલ શીટની શૅરિંગ સેટિંગ્સ "Anyone with the link can view" હોવી જોઇએ.',
-      ''
-    );
-    if (!url || !url.trim()) return;
-
-    try {
-      showToast('ગૂગલ શીટમાંથી સાચો ડેટા લોડ થઈ રહ્યો છે... (Loading from Google Sheet...)');
-      const parsed = await parseGoogleSheetUrl(url);
-      if (parsed.books.length > 0) {
-        localStorage.removeItem('my_book_collection_is_cleared');
-        const sorted = sortBooksIndependently(parsed.books);
-        setBooks(sorted);
-        if (parsed.borrowers.length > 0) {
-          setBorrowers(parsed.borrowers);
-        }
-        bulkSaveBooksToFirestore(sorted).catch((err) => console.warn('Firestore sync Google Sheet error:', err));
-        showToast(`ગૂગલ શીટમાંથી કુલ ${parsed.books.length} પુસ્તકો સફળતાપૂર્વક લોડ થઈ ગયા!`);
-      } else {
-        alert('Google Sheet માં કોઈ પુસ્તક રેકોર્ડ મળ્યા નથી. કૃપા કરીને કોલમ ચેક કરો.');
-      }
-    } catch (err) {
-      alert('Google Sheet લોડ કરવામાં ભૂલ: ' + (err as Error).message);
-    }
-  };
-
-  const handleClearAllBooks = () => {
-    if (currentUser?.role !== 'Admin') {
-      showToast('⚠️ મનાઈ (Permission Denied): ડેટાબેઝ ક્લિયર કરવાની પરવાનગી ફક્ત Admin પાસે જ છે.');
-      return;
-    }
-    setIsClearConfirmOpen(true);
-  };
-
-  const handleExecuteClearDatabase = async () => {
-    if (currentUser?.role !== 'Admin') {
-      showToast('⚠️ મનાઈ (Permission Denied): ડેટાબેઝ ક્લિયર કરવાની પરવાનગી ફક્ત Admin પાસે જ છે.');
-      setIsClearConfirmOpen(false);
-      return;
-    }
-    setIsClearingInProgress(true);
-    try {
-      localStorage.setItem('my_book_collection_is_cleared', 'true');
-      localStorage.removeItem(CURRENT_STORAGE_KEY);
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith('my_book_collection_user_books') || key.startsWith('my_book_collection_books'))) {
-          localStorage.removeItem(key);
-        }
-      }
-      setBooks([]);
-      handleReset([]);
-      showToast('🗑️ તમામ પુસ્તકો સાફ થઈ રહ્યા છે...');
-      await clearAllBooksInFirestore(books);
-      showToast('✅ લાઈબ્રેરીનો તમામ ડેટા સાફ થઈ ગયો છે (કુલ પુસ્તકો: 0). હવે તમે નવી Excel ફાઈલ આસાનીથી ઈમ્પોર્ટ કરી શકો છો.');
-    } catch (err) {
-      console.warn('Clear database error:', err);
-      showToast('⚠️ ડેટા સાફ કરવામાં મુશ્કેલી આવી.');
-    } finally {
-      setIsClearingInProgress(false);
-      setIsClearConfirmOpen(false);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('my_book_collection_user');
-    const userRole: AppUser = {
-      id: 'guest_user',
-      username: 'user',
-      name: 'User',
-      role: 'User',
-    };
-    setCurrentUser(userRole);
-    setIsLoginModalOpen(true);
-    showToast('Logged out successfully. Select an account to log in.');
-  };
+  }, [currentIssue, selectedCategoryTab, categoryTabsData]);
 
   return (
-    <div className={`min-h-screen font-sans flex flex-col transition-colors duration-200 ${
-      theme === 'light'
-        ? 'theme-light bg-slate-100 text-slate-900'
-        : theme === 'sepia'
-        ? 'theme-sepia bg-[#f4ecd8] text-[#3d2b1f]'
-        : 'bg-slate-900 text-slate-100'
-    }`}>
+    <div className={`min-h-screen w-full max-w-full overflow-x-hidden transition-colors duration-200 pt-28 sm:pt-20 ${
+      readingTheme === 'dark' 
+        ? 'bg-[#1A1D1A] text-[#E2DFD6]' 
+        : readingTheme === 'sepia' 
+        ? 'bg-[#DFD1B3] text-[#241C11]' 
+        : 'bg-[#F9F7F2] text-[#3D3D3D]'
+    } pb-20 sm:pb-12`}>
       
-      {/* Firebase Free Quota Exceeded Warning Banner */}
-      {quotaExceeded && (
-        <div className="bg-amber-950/95 border-b-2 border-amber-500 text-amber-200 px-4 py-3 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-2xl z-50 animate-in slide-in-from-top duration-300">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0 animate-bounce" />
-            <div>
-              <strong className="text-amber-300 font-bold text-sm block">
-                ⚠️ ફાયરબેઝ ફ્રી કોટા લિમિટ પૂરી થઈ છે (Firebase Free Daily Quota Limit Exceeded)
-              </strong>
-              <p className="text-xs text-amber-200/90 leading-relaxed mt-0.5">
-                તમે બનાવેલા નવા યુઝર્સ અથવા ફેરફારો તમારા આ બ્રાઉઝરના <strong>Local Storage</strong> માં સુરક્ષિત સેવ થયેલ છે. પરંતુ ફાયરબેઝ સર્વરની ફ્રી ડેઇલી લીમીટ પૂરી થઈ હોવાથી ફાયરબેઝ ક્લાઉડ અને બીજા ડિવાઇસ / પબ્લિશ લિંક પર તે અત્યારે Synchronize નહીં થાય. (24 કલાકમાં Firebase ફ્રી કોટા રિસેટ થતાં ક્લાઉડમાં અપડેટ થઈ શકશે.)
+      {/* Navigation Header - Always visible so user can adjust font size and theme anytime */}
+      <Navbar
+        readingTheme={readingTheme}
+        setReadingTheme={setReadingTheme}
+        fontSize={fontSize}
+        setFontSize={setFontSize}
+        searchQuery={searchQuery}
+        setSearchQuery={handleSearchChange}
+        bookmarksCount={bookmarkedArticleIds.length}
+        onOpenBookmarks={() => setIsBookmarksOpen(true)}
+        onOpenAddIssue={handleOpenAddArticle}
+        onOpenBackup={handleOpenBackup}
+        onOpenInstallModal={() => setIsInstallGuideOpen(true)}
+        onOpenStatistics={() => setIsStatisticsOpen(true)}
+        totalArticlesCount={totalArticlesCount}
+        cloudSyncStatus={cloudSyncStatus}
+        readingProgress={activeArticle ? activeReadingProgress : undefined}
+        isStandalone={isStandaloneMode}
+        onPullFromCloud={handlePullFromCloud}
+        isPullingCloud={isPullingFromCloud}
+        onGoHome={() => {
+          if (isStandaloneMode) {
+            // In standalone mode, prevent navigating to main article collection
+            return;
+          }
+          setActiveArticle(null);
+          setSearchQuery('');
+          setActiveReadingProgress(0);
+        }}
+      />
+
+      {/* Floating Cloud Pull Notification Toast */}
+      {pullToast && (
+        <div 
+          role="status"
+          aria-live="polite"
+          className={`fixed top-20 sm:top-18 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs sm:text-sm font-semibold transition-all duration-300 max-w-[90vw] ${
+            pullToast.isError 
+              ? 'bg-red-700 text-white border border-red-600 shadow-red-900/20' 
+              : isPullingFromCloud
+              ? 'bg-indigo-700 text-white border border-indigo-600 shadow-indigo-900/20'
+              : 'bg-emerald-700 text-white border border-emerald-600 shadow-emerald-900/20'
+          }`}
+        >
+          {isPullingFromCloud ? (
+            <RefreshCw className="w-4 h-4 animate-spin shrink-0 text-white" />
+          ) : pullToast.isError ? (
+            <AlertCircle className="w-4 h-4 shrink-0 text-white" />
+          ) : (
+            <Check className="w-4 h-4 shrink-0 text-white" />
+          )}
+          <span className="font-serif-guj leading-tight">{pullToast.message}</span>
+          {!isPullingFromCloud && (
+            <button
+              onClick={() => setPullToast(null)}
+              className="ml-1 text-white/80 hover:text-white cursor-pointer font-bold px-1"
+              title="બંધ કરો"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Firebase દૈનિક લિમિટ / Quota Exceeded Banner */}
+      {hasQuotaExceeded() && (
+        <div className="bg-red-700 text-white px-4 py-3 text-center text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-2 border-b border-red-800 animate-pulse">
+          <AlertCircle className="w-5 h-5 shrink-0 text-white" />
+          <span>
+            ⚠️ Firebase દૈનિક ક્વોટા લિમિટ પૂરી થઈ છે: આજે હવે કોઈ નવા ફેરફાર કે અખતરા ન કરવા અને પોરો ખાવો. આવતીકાલે ક્વોટા આપોઆપ રીસેટ થઈ જશે!
+          </span>
+        </div>
+      )}
+
+      {/* Reader View or Main Article List View */}
+      {activeArticle ? (
+        <ArticleReader
+          article={activeArticle}
+          issue={currentIssue || {
+            id: 'collection-main',
+            issueNumber: 1,
+            date: activeArticle.date || 'વાંચન સંગ્રહ',
+            themeTitle: 'વાંચન સંગ્રહ',
+            articles: [activeArticle],
+          }}
+          isStandalone={isStandaloneMode}
+          onBack={() => {
+            if (isStandaloneMode) {
+              // In standalone mode, back navigation is disabled
+              return;
+            }
+            setActiveArticle(null);
+            setActiveReadingProgress(0);
+          }}
+          onSelectArticle={(art) => {
+            handleSelectArticle(art);
+            setActiveReadingProgress(0);
+          }}
+          isBookmarked={bookmarkedArticleIds.includes(activeArticle.id)}
+          onToggleBookmark={handleToggleBookmark}
+          readingTheme={readingTheme}
+          fontSize={fontSize}
+          onProgressChange={handleProgressChange}
+        />
+      ) : isStandaloneMode ? (
+        // In standalone mode, if article is password protected or loading, provide clean state without exposing catalog
+        <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
+          {isSharedArticleFetching ? (
+            <>
+              <div className="w-12 h-12 rounded-full border-4 border-[#7B8E7E]/30 border-t-[#7B8E7E] animate-spin mb-4" />
+              <p className="font-serif-guj text-base text-[#57534E] dark:text-[#A8A29E]">
+                શેર કરેલ લેખ ખૂલી રહ્યો છે... કૃપા કરીને રાહ જુઓ.
+              </p>
+            </>
+          ) : targetSharedArticle?.isPasswordProtected ? (
+            <div className="p-6 sm:p-8 rounded-2xl bg-white dark:bg-[#252A25] border border-amber-500/30 shadow-lg text-center w-full">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-4">
+                <Lock className="w-7 h-7" />
+              </div>
+              <h2 className="font-serif-guj text-lg sm:text-xl font-bold text-[#1C1917] dark:text-[#F5F5F4] mb-2">
+                આ લેખ પાસવર્ડથી સુરક્ષિત છે
+              </h2>
+              <p className="text-xs sm:text-sm text-[#57534E] dark:text-[#A8A29E] mb-5">
+                આ લેખ વાંચવા માટે પાસવર્ડ અથવા વન-ટાઈમ OTP દાખલ કરવો જરૂરી છે.
+              </p>
+
+              <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-900 dark:text-amber-200">
+                <p className="font-semibold mb-2 flex items-center justify-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-amber-600" />
+                  <span>પાસવર્ડ મેળવવા માટે સંચાલકનો સંપર્ક:</span>
+                </p>
+                <div className="space-y-2 pt-1 w-full max-w-sm mx-auto">
+                  <div className="grid grid-cols-2 gap-2 w-full">
+                    <a
+                      href={`https://wa.me/91${adminContactPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                        `નમસ્તે, મારે "${targetSharedArticle?.title || 'લેખ'}" વાંચવા માટે OTP પાસવર્ડ જોઈએ છે.\n\n👉 એડમિન માટે સીધો OTP બનાવવાની લિંક:\n${targetSharedArticle ? getAdminOtpUrl(targetSharedArticle.id) : ''}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer text-center w-full"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{adminSecondaryPhone ? 'WhatsApp (મુખ્ય)' : 'WhatsApp પર માંગો'}</span>
+                    </a>
+                    <a
+                      href={`tel:${adminContactPhone.replace(/[^0-9]/g, '')}`}
+                      className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-stone-200 dark:bg-[#333A33] hover:bg-stone-300 dark:hover:bg-[#3F473F] text-stone-800 dark:text-stone-100 font-bold text-xs transition cursor-pointer text-center w-full"
+                    >
+                      <Phone className="w-3.5 h-3.5 shrink-0 text-[#7B8E7E]" />
+                      <span className="font-mono">{adminContactPhone}</span>
+                    </a>
+                  </div>
+
+                  {adminSecondaryPhone ? (
+                    <div className="grid grid-cols-2 gap-2 w-full pt-1.5 border-t border-amber-500/20">
+                      <a
+                        href={`https://wa.me/91${adminSecondaryPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                          `નમસ્તે, મારે "${targetSharedArticle?.title || 'લેખ'}" વાંચવા માટે OTP પાસવર્ડ જોઈએ છે.\n\n👉 એડમિન માટે સીધો OTP બનાવવાની લિંક:\n${targetSharedArticle ? getAdminOtpUrl(targetSharedArticle.id) : ''}`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-emerald-700/90 hover:bg-emerald-800 text-white font-bold text-xs transition shadow-xs cursor-pointer text-center w-full"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">WhatsApp (બીજો નંબર)</span>
+                      </a>
+                      <a
+                        href={`tel:${adminSecondaryPhone.replace(/[^0-9]/g, '')}`}
+                        className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-stone-200 dark:bg-[#333A33] hover:bg-stone-300 dark:hover:bg-[#3F473F] text-stone-800 dark:text-stone-100 font-bold text-xs transition cursor-pointer text-center w-full"
+                      >
+                        <Phone className="w-3.5 h-3.5 shrink-0 text-[#7B8E7E]" />
+                        <span className="font-mono">{adminSecondaryPhone}</span>
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (targetSharedArticle) {
+                    handleSelectArticle(targetSharedArticle);
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-[#7B8E7E] hover:bg-[#687A6B] text-white font-semibold text-sm transition shadow-xs cursor-pointer"
+              >
+                પાસવર્ડ દાખલ કરો
+              </button>
+            </div>
+          ) : (
+            <div className="p-6 rounded-2xl bg-white dark:bg-[#252A25] border border-black/10 dark:border-white/10 text-center w-full">
+              <p className="font-serif-guj text-base text-[#57534E] dark:text-[#A8A29E]">
+                શેર કરેલ લેખ મળી શક્યો નથી અથવા તે દૂર કરવામાં આવ્યો છે.
               </p>
             </div>
+          )}
+        </div>
+      ) : (
+        /* Main Container */
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
+        
+        {/* Search Results Mode */}
+        {searchResults !== null ? (
+          <div className="space-y-6">
+            {/* Search Summary Header */}
+            <div className="py-3 px-4 sm:py-3.5 sm:px-5 rounded-xl bg-white dark:bg-[#252A25] border border-[#E5E1D3] dark:border-[#353D35] shadow-2xs flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                <h2 className="text-base sm:text-lg font-bold font-serif-guj text-[#1C1917] dark:text-[#F5F5F4] flex items-center gap-1.5">
+                  શબ્દ શોધ: <span className="text-[#5B8260] dark:text-[#A3D9A5]">"{searchQuery.trim()}"</span>
+                </h2>
+                <span className="px-3 py-0.5 rounded-lg text-base sm:text-lg font-bold font-serif-guj bg-[#E8F1E9] dark:bg-[#2F3E31] text-[#2D4530] dark:text-[#C5DAC8] border border-[#5B8260]/20">
+                  {searchResults.length} લેખ મળ્યા
+                </span>
+                {totalSearchOccurrences > 0 && (
+                  <span className="px-3 py-0.5 rounded-lg text-base sm:text-lg font-bold font-serif-guj bg-[#FAF2E9] dark:bg-[#3D3325] text-[#8C6239] dark:text-[#E0C3A5] border border-[#8C6239]/20">
+                    કુલ {totalSearchOccurrences} વખત ઉલ્લેખ
+                  </span>
+                )}
+              </div>
+
+              <button
+                onClick={() => setSearchQuery('')}
+                className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm bg-[#F2EFE6] dark:bg-[#202520] hover:bg-[#E5E1D3] dark:hover:bg-[#2D342D] text-[#1C1917] dark:text-[#F5F5F4] border border-[#D6D3D1] dark:border-[#353D35] font-semibold transition cursor-pointer shrink-0"
+              >
+                શોધ સાફ કરો
+              </button>
+            </div>
+
+            {searchResults.length === 0 ? (
+              <div className="text-center py-16 bg-white dark:bg-[#252A25] rounded-2xl border border-[#E5E1D3] dark:border-[#353D35] shadow-xs">
+                <p className="text-[#7A7566] dark:text-[#9A9483] text-sm">આ શબ્દ માટે કોઈ લેખ મળ્યો નથી.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {searchResults.map(({ issue, article, matchCount }, idx) => (
+                  <ArticleCard
+                    key={article.id}
+                    article={article}
+                    index={idx}
+                    readingTheme={readingTheme}
+                    searchKeyword={searchQuery.trim()}
+                    searchMatchCount={matchCount}
+                    onRead={() => handleSelectArticle(article, issue.id)}
+                    isBookmarked={bookmarkedArticleIds.includes(article.id)}
+                    onToggleBookmark={() => handleToggleBookmark(article.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
+        ) : (
+          <>
+            {/* Articles Collection Section */}
+            {isInitialLoading ? (
+              <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-9 h-9 border-3 border-[#7B8E7E] border-t-transparent rounded-full animate-spin"></div>
+                <div className="space-y-1">
+                  <p className="text-base font-semibold font-serif-guj text-[#1C1917] dark:text-[#F5F5F4]">
+                    લેખ સંગ્રહ લોડ થઈ રહ્યો છે...
+                  </p>
+                  <p className="text-xs text-[#7A7566] dark:text-[#9A9483]">
+                    કૃપા કરીને થોડી ક્ષણ રાહ જુઓ
+                  </p>
+                </div>
+              </div>
+            ) : currentIssue && (
+              <section className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="text-xl sm:text-2xl font-bold font-serif-guj text-[#1C1917] dark:text-[#F5F5F4]">
+                        વિસ્મય તથા અન્ય લેખ
+                      </h3>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#44403C] dark:text-[#A8A29E] mt-1">
+                      કેન્દ્રીય વિષય: <span className="font-semibold text-[#1C1917] dark:text-[#F5F5F4]">{currentIssue.themeTitle}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Category Filter Tabs: Placed right here in this section, sticky on scroll */}
+                {categoryTabsData.tabs.length > 1 && (
+                  <div className="sticky top-[58px] sm:top-[68px] z-20 py-2 -mx-2 px-2 bg-[#F9F7F2]/95 dark:bg-[#1A1D1A]/95 backdrop-blur-md border-b border-[#E5E1D3]/80 dark:border-[#353D35]/80 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    <div className="flex items-center gap-1.5 sm:gap-2 min-w-max pb-0.5 pr-4">
+                      {categoryTabsData.tabs.map((tab) => {
+                        const isSelected = selectedCategoryTab === tab.id;
+                        const tabTheme = getTabColorClasses(tab.id);
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setSelectedCategoryTab(tab.id)}
+                            className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer shrink-0 select-none whitespace-nowrap shadow-xs ${
+                              isSelected
+                                ? tabTheme.active
+                                : tabTheme.inactive
+                            }`}
+                          >
+                            <span>{tab.label}</span>
+                            <span
+                              className={`px-1.5 py-0.2 rounded-full text-[10px] sm:text-[11px] font-bold ${
+                                isSelected
+                                  ? tabTheme.badgeActive
+                                  : tabTheme.badgeInactive
+                              }`}
+                            >
+                              {tab.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Articles Grid (2 columns layout) */}
+                {displayedArticles.length === 0 ? (
+                  <div className="text-center py-16 bg-white dark:bg-[#252A25] rounded-2xl border border-[#E5E1D3] dark:border-[#353D35] p-6 space-y-2">
+                    <p className="text-base font-medium font-serif-guj text-[#1C1917] dark:text-[#F5F5F4]">
+                      {selectedCategoryTab === 'ALL'
+                        ? 'હજુ સુધી કોઈ લેખ મળ્યો નથી.'
+                        : `"${selectedCategoryTab}" વિષયમાં કોઈ લેખ મળ્યો નથી.`}
+                    </p>
+                    <p className="text-xs text-[#7A7566] dark:text-[#9A9483]">
+                      {selectedCategoryTab !== 'ALL' ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCategoryTab('ALL')}
+                          className="text-[#5B8260] font-semibold underline cursor-pointer"
+                        >
+                          બધા લેખો (ALL) જોવા અહીં ક્લિક કરો
+                        </button>
+                      ) : (
+                        'ઉપર આપેલા "નવો લેખ ઉમેરો" બટન દ્વારા નવો લેખ ઉમેરી શકો છો.'
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {displayedArticles.map((article, index) => (
+                      <ArticleCard
+                        key={article.id}
+                        article={article}
+                        index={index}
+                        readingTheme={readingTheme}
+                        onRead={() => handleSelectArticle(article)}
+                        isBookmarked={bookmarkedArticleIds.includes(article.id)}
+                        onToggleBookmark={() => handleToggleBookmark(article.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Practical Advice Banner for Readers & Creators */}
+            <section className="rounded-2xl p-6 border border-[#E5E1D3] dark:border-[#353D35] bg-white dark:bg-[#252A25] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-3 rounded-xl bg-[#A67C52]/15 text-[#8C6239] dark:text-[#E0C3A5] shrink-0">
+                  <Smartphone className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-[#2D3436] dark:text-[#E2DFD6]">
+                    તમારા મોબાઇલની હોમ સ્ક્રીન પર આ એપ મૂકો
+                  </h4>
+                  <p className="text-xs text-[#7A7566] dark:text-[#9A9483] mt-0.5 max-w-xl">
+                    કોઈ પ્લે સ્ટોર વગર તમારા બ્રાઉઝરમાંથી "Add to Home Screen" કરીને બધા લેખો સીધા તમારા ફોનમાં જ સરળતાથી ખોલો.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setIsInstallGuideOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-[#7B8E7E] hover:bg-[#687A6B] text-white text-xs font-semibold transition shadow-xs cursor-pointer"
+                >
+                  ઇન્સ્ટોલ કરવાની રીત જુઓ
+                </button>
+              </div>
+            </section>
+
+            {/* Site Total Visitors & Statistics Bottom Card */}
+            <footer className="mt-10 pt-6 pb-20 sm:pb-8 border-t border-[#E5E1D3] dark:border-[#353D35] text-center">
+              <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 text-xs sm:text-sm">
+                
+                {/* Total Articles Counter */}
+                <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-[#252A25] border border-[#E5E1D3] dark:border-[#353D35] shadow-xs">
+                  <BookOpen className="w-4 h-4 text-[#1D5299] dark:text-[#88B4E8]" />
+                  <span className="text-[#6B7280] dark:text-[#9CA3AF]">કુલ સંગ્રહિત લેખો:</span>
+                  <span className="font-bold text-[#1D5299] dark:text-[#88B4E8] font-sans text-sm">
+                    {totalArticlesCount}
+                  </span>
+                </div>
+
+                {/* Total Visitors Counter */}
+                <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-[#252A25] border border-[#E5E1D3] dark:border-[#353D35] shadow-xs">
+                  <Users className="w-4 h-4 text-[#5B8260] dark:text-[#A8BDAA]" />
+                  <span className="text-[#6B7280] dark:text-[#9CA3AF]">કુલ વિઝિટર:</span>
+                  <span className="font-bold text-[#5B8260] dark:text-[#A8BDAA] font-sans text-sm">
+                    {visitorCount.toLocaleString('gu-IN')}
+                  </span>
+                </div>
+
+                {/* Detailed Analysis Button */}
+                <button
+                  onClick={() => setIsStatisticsOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1D5299]/10 hover:bg-[#1D5299]/20 text-[#1D5299] dark:text-[#88B4E8] border border-[#1D5299]/25 transition cursor-pointer font-semibold text-xs shadow-xs"
+                  title="લેખોનું આંકડાકીય વિશ્લેષણ જુઓ"
+                >
+                  <BarChart2 className="w-4 h-4" />
+                  <span>આંકડાકીય વિશ્લેષણ</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-[#8C857B] dark:text-[#9CA3AF] mt-3 font-serif-guj flex items-center justify-center gap-1.5">
+                <span>લેખ સંગ્રહ • શ્રેષ્ઠ વિચારો અને સાહિત્યનો અખૂટ ભંડાર</span>
+                <button
+                  type="button"
+                  onClick={handlePullFromCloud}
+                  disabled={isPullingFromCloud}
+                  title="ક્લાઉડમાંથી તમામ લેખો ખેંચવા / Pull from Cloud કરવા ક્લિક કરો"
+                  className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-200/70 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-emerald-100 hover:text-emerald-800 dark:hover:bg-emerald-950 dark:hover:text-emerald-300 transition cursor-pointer inline-flex items-center gap-1"
+                >
+                  {isPullingFromCloud && <RefreshCw className="w-2.5 h-2.5 animate-spin text-emerald-700 dark:text-emerald-300" />}
+                  <span>{APP_VERSION}</span>
+                </button>
+              </p>
+            </footer>
+          </>
+        )}
+
+      </main>
+      )}
+
+      {/* Mobile Bottom Quick Navigation Bar (Touch-friendly for phones, hidden in standalone) */}
+      {!isStandaloneMode && (
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 w-full max-w-full overflow-hidden bg-white/95 dark:bg-[#1A1D1A]/95 backdrop-blur-md border-t border-[#E5E1D3] dark:border-[#2D342D] px-4 py-2.5 flex items-center justify-around text-[10px] font-medium text-[#7A7566] dark:text-[#9A9483] shadow-lg">
           <button
-            onClick={handleDismissQuota}
-            className="text-amber-300 hover:text-white font-bold px-3 py-1.5 rounded bg-amber-900/80 border border-amber-500/60 cursor-pointer text-xs shrink-0 shadow"
+            onClick={() => setIsStatisticsOpen(true)}
+            className="flex flex-col items-center gap-1 text-[#1D5299] dark:text-[#88B4E8] font-bold"
+            title="આંકડાકીય વિશ્લેષણ અને સ્ટેટેક્સ્ટિક્સ"
           >
-            સમજાઈ ગયું ✕
+            <BarChart2 className="w-4 h-4" />
+            <span>સ્ટેટેક્સ્ટિક્સ</span>
+          </button>
+
+          <button
+            onClick={() => setIsBookmarksOpen(true)}
+            className="flex flex-col items-center gap-1 hover:text-[#3D3D3D] dark:hover:text-white relative"
+          >
+            <Bookmark className="w-4 h-4" />
+            <span>સાચવેલા ({bookmarkedArticleIds.length})</span>
+          </button>
+
+          <button
+            onClick={handleOpenAddArticle}
+            className="flex flex-col items-center gap-1 hover:text-[#3D3D3D] dark:hover:text-white"
+            title="નવો લેખ ઉમેરો / સુધારો (એડમિન)"
+          >
+            <PlusCircle className="w-4 h-4 text-[#7B8E7E]" />
+            <span>નવો લેખ / સુધારો</span>
+          </button>
+
+          <button
+            onClick={() => setIsInstallGuideOpen(true)}
+            className="flex flex-col items-center gap-1 hover:text-[#3D3D3D] dark:hover:text-white"
+          >
+            <Smartphone className="w-4 h-4 text-[#7B8E7E]" />
+            <span>ઇન્સ્ટોલ</span>
           </button>
         </div>
       )}
 
-      {/* Toast Notification Alert */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-800 text-white px-4 py-2.5 rounded shadow-xl border border-slate-700 flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-200 text-xs">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="font-semibold">{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Application Master Header */}
-      <Header
-        languageMode={languageMode}
-        setLanguageMode={setLanguageMode}
-        onOpenVBA={() => setIsVBAModalOpen(true)}
-        onExportExcel={handleExportDatabaseExcel}
-        onImportExcel={handleImportExcel}
-        onExportJSON={handleExportJSON}
-        onImportJSON={handleImportJSON}
-        onResetCatalog={handleRestoreDefaultBooks}
-        onClearAll={handleClearAllBooks}
-        onOpenBackups={handleOpenBackups}
-        onOpenInstallModal={() => setIsInstallModalOpen(true)}
-        currentAppIcon={currentAppIcon}
-        localDirectory={localDirectory}
-        totalBooksCount={books.length}
-        currentUser={currentUser}
-        onOpenLoginModal={() => setIsLoginModalOpen(true)}
-        onLogout={handleLogout}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        onSelectTheme={handleSelectTheme}
-      />
-
-
-      {/* Main App Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 space-y-3">
-        
-        {/* FRAME 1: Book Entry Information */}
-        <FrameBookEntry
-          formData={formData}
-          setFormData={setFormData}
-          masters={masters}
-          existingBooks={books}
-          languageMode={languageMode}
-          isEditing={isEditing}
-          isAdmin={currentUser?.role === 'Admin'}
-          canEditBookType={true}
-          onSelectBook={(book) => handleSelectBook(book, true)}
-        />
-
-        {/* Action Command Buttons Row */}
-        <ActionButtons
-          onSaveUpdate={handleSaveUpdate}
-          onExportExcel={handleExportDatabaseExcel}
-          onPDFLandscape={handlePDFLandscape}
-          onPDFPortrait={handlePDFPortrait}
-          onPDFFolder={handleOpenBackups}
-          onReset={handleReset}
-          onBackup={handleTriggerBackup}
-          onMaster={handleMaster}
-          isEditing={isEditing}
-          canExport={currentUser?.role === 'Admin' || currentUser?.role === 'Super User'}
-          canSave={currentUser?.role === 'Admin' || currentUser?.role === 'Super User'}
-          canManageMaster={currentUser?.role === 'Admin'}
-        />
-
-        {/* FRAME 2: Search & List Window */}
-        <FrameSearchList
-          books={books}
-          borrowers={borrowers}
-          searchCriterion={searchCriterion}
-          setSearchCriterion={setSearchCriterion}
-          searchValue={searchValue}
-          setSearchValue={setSearchValue}
-          onSelectBook={handleSelectBook}
-          onDeleteBook={handleDeleteBook}
-          onQuickIssue={(book) => {
-            setSelectedBookForIssue(book);
-            const el = document.getElementById('txt_BorrowerName');
-            if (el) el.focus();
+      {/* Modals & Drawers */}
+      {isAdminPasswordOpen && (
+        <AdminPasswordModal
+          isOpen={isAdminPasswordOpen}
+          actionType={pendingAdminAction || 'add'}
+          targetArticle={pendingTargetArticle}
+          targetIssueId={pendingTargetIssueId}
+          initialPassword={urlOtpParam || ''}
+          onUpdateArticleOtps={handleUpdateArticleOtps}
+          openOtpManagerDirectly={openOtpManagerDirectly}
+          isAdminAuthenticated={isAdminAuthenticated}
+          adminContactPhone={adminContactPhone}
+          adminSecondaryPhone={adminSecondaryPhone}
+          onUpdateAdminContactPhone={(primary, secondary) => {
+            setAdminContactPhone(primary);
+            if (secondary !== undefined) {
+              setAdminSecondaryPhone(secondary);
+            }
           }}
-          onOpenLocalFile={(book) => handleSelectBook(book, true)}
-          selectedBookId={formData.bookId}
-          languageMode={languageMode}
-          isAdmin={currentUser?.role === 'Admin'}
-        />
-
-        {/* FRAME 3: Borrower Information */}
-        <FrameBorrowerInfo
-          selectedBook={selectedBookForIssue || (isEditing ? formData : null)}
-          borrowers={borrowers}
-          onIssueBook={handleIssueBook}
-          onReturnBook={handleReturnBook}
-          onOpenIssueList={() => setIsIssueListOpen(true)}
-          languageMode={languageMode}
-          totalIssuedCount={borrowers.filter((b) => b.status === 'Issued').length}
-          canIssue={currentUser?.role === 'Admin' || currentUser?.role === 'Super User'}
-          theme={theme}
-        />
-
-      </main>
-
-      {/* Bento Grid Status Footer */}
-      <footer className="bg-slate-200 text-slate-500 px-4 py-1.5 text-[9px] flex flex-wrap justify-between items-center uppercase tracking-tighter shrink-0 border-t border-slate-300 font-mono mt-auto gap-2">
-        <div className="flex items-center gap-4 flex-wrap">
-          <span>Status: <span className="text-green-600 font-bold">System Ready</span></span>
-          <span>Sync: <span className="text-blue-600 font-bold">Connected</span></span>
-        </div>
-        <div className="text-slate-500">
-          Press ALT+S to Quick Save • Devdutt Thaker (7878413535)
-        </div>
-      </footer>
-
-      {/* Modals */}
-      <MasterManagementModal
-        isOpen={isMasterModalOpen}
-        onClose={() => setIsMasterModalOpen(false)}
-        masters={masters}
-        setMasters={setMasters}
-        currentUser={currentUser}
-        allUsers={allUsers}
-        onAddUser={async (rawUser) => {
-          const nu = sanitizeUserRole(rawUser);
-          setAllUsers((prev) => {
-            const keyNew = (nu.username || nu.id).toLowerCase();
-            const exists = prev.some(
-              (u) => (u.username || u.id).toLowerCase() === keyNew || u.id.toLowerCase() === nu.id.toLowerCase()
-            );
-            let updated;
-            if (exists) {
-              updated = prev.map((u) =>
-                (u.username || u.id).toLowerCase() === keyNew || u.id.toLowerCase() === nu.id.toLowerCase()
-                  ? nu
-                  : u
-              );
+          onClose={() => {
+            setIsAdminPasswordOpen(false);
+            setPendingAdminAction(null);
+            setPendingTargetArticle(null);
+            setPendingTargetIssueId(undefined);
+            setOpenOtpManagerDirectly(false);
+          }}
+          onSuccess={(usedOtp) => {
+            if (pendingAdminAction === 'article_unlock' && pendingTargetArticle) {
+              if (usedOtp) {
+                handleUpdateArticleOtps(
+                  pendingTargetArticle.id,
+                  (pendingTargetArticle.oneTimePasscodes || []).filter((o) => o !== usedOtp)
+                );
+              }
+              setActiveArticle(pendingTargetArticle);
             } else {
-              updated = [...prev, nu];
+              setIsAdminAuthenticated(true);
+              if (pendingAdminAction === 'backup') {
+                setIsBackupModalOpen(true);
+              } else {
+                setIsAddModalOpen(true);
+              }
             }
-            localStorage.setItem('my_book_collection_all_users', JSON.stringify(updated));
-            return updated;
-          });
-          const saveRes = await saveUserToFirestore(nu);
-          if (saveRes && saveRes.quotaExceeded) {
-            setQuotaExceeded(true);
-          }
-          showToast(`નવો યુઝર/એકાઉન્ટ સેવ થયો: ${nu.name} (${nu.role})`);
-          return saveRes;
-        }}
-        onDeleteUser={(du) => {
-          deleteUserFromFirestore(du.id, du.username).catch((err) => console.warn('Firestore delete user error:', err));
-          setAllUsers((prev) => {
-            const duId = (du.id || '').trim().toLowerCase();
-            const duUsername = (du.username || du.id || '').trim().toLowerCase();
-            const updated = prev.filter((u) => {
-              const uId = (u.id || '').trim().toLowerCase();
-              const uUsername = (u.username || u.id || '').trim().toLowerCase();
-              return uId !== duId && uUsername !== duUsername && uId !== duUsername && uUsername !== duId;
-            });
-            localStorage.setItem('my_book_collection_all_users', JSON.stringify(updated));
-            return updated;
-          });
-          showToast(`સફળતાપૂર્વક યુઝર ખાતું ડિલીટ થયું: ${du.name}`);
-        }}
-        onUpdateUserRole={(rawUser) => {
-          const uu = sanitizeUserRole(rawUser);
-          saveUserToFirestore(uu).catch((err) => console.warn('Firestore update user role error:', err));
-          setAllUsers((prev) => {
-            const updated = prev.map((u) =>
-              u.id.toLowerCase() === uu.id.toLowerCase() ||
-              u.username.toLowerCase() === uu.username.toLowerCase()
-                ? uu
-                : u
-            );
-            localStorage.setItem('my_book_collection_all_users', JSON.stringify(updated));
-            return updated;
-          });
-          showToast(`✅ ${uu.name} ની વિગતો અપડેટ થઈ!`);
-        }}
-        showToast={showToast}
-      />
-
-      <VBACodeModal
-        isOpen={isVBAModalOpen}
-        onClose={() => setIsVBAModalOpen(false)}
-      />
-
-      <IssueListModal
-        isOpen={isIssueListOpen}
-        onClose={() => setIsIssueListOpen(false)}
-        borrowers={borrowers}
-        onReturnBook={handleReturnBook}
-        onDeleteIssue={handleDeleteBorrowerRecord}
-        currentUser={currentUser}
-        currentUserRole={currentUser?.role}
-      />
-
-      <BackupFolderModal
-        isOpen={isBackupModalOpen}
-        onClose={() => setIsBackupModalOpen(false)}
-        backups={backups}
-        pdfExports={pdfExports}
-        onDownloadDatabase={() => exportDatabaseToExcel(books, borrowers, currentUser?.role === 'Admin')}
-        onClearDatabase={handleClearAllBooks}
-        onExportJSON={handleExportJSON}
-        onImportJSON={handleImportJSON}
-        currentUser={currentUser}
-      />
-
-      <LoginModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-        currentUser={currentUser}
-        allUsers={allUsers}
-        theme={theme}
-        onLogin={(u) => {
-          setCurrentUser(u);
-          setFormData((prev) => ({ ...prev, createdBy: u.name }));
-          showToast(`લૉગિન સફળ! [${u.role}] - ${u.name}`);
-        }}
-        onAddUser={async (rawUser) => {
-          const nu = sanitizeUserRole(rawUser);
-          setAllUsers((prev) => {
-            const keyNew = (nu.username || nu.id).toLowerCase();
-            const exists = prev.some(
-              (u) => (u.username || u.id).toLowerCase() === keyNew || u.id.toLowerCase() === nu.id.toLowerCase()
-            );
-            let updated;
-            if (exists) {
-              updated = prev.map((u) =>
-                (u.username || u.id).toLowerCase() === keyNew || u.id.toLowerCase() === nu.id.toLowerCase()
-                  ? nu
-                  : u
-              );
-            } else {
-              updated = [...prev, nu];
-            }
-            localStorage.setItem('my_book_collection_all_users', JSON.stringify(updated));
-            return updated;
-          });
-          const saveRes = await saveUserToFirestore(nu);
-          if (saveRes && saveRes.quotaExceeded) {
-            setQuotaExceeded(true);
-          }
-          showToast(`નવો યુઝર/એકાઉન્ટ ઉમેરાયો: ${nu.name} (${nu.role})`);
-          return saveRes;
-        }}
-        onDeleteUser={(du) => {
-          deleteUserFromFirestore(du.id, du.username).catch((err) => console.warn('Firestore delete user error:', err));
-          setAllUsers((prev) => {
-            const duId = (du.id || '').trim().toLowerCase();
-            const duUsername = (du.username || du.id || '').trim().toLowerCase();
-            const updated = prev.filter((u) => {
-              const uId = (u.id || '').trim().toLowerCase();
-              const uUsername = (u.username || u.id || '').trim().toLowerCase();
-              return uId !== duId && uUsername !== duUsername && uId !== duUsername && uUsername !== duId;
-            });
-            localStorage.setItem('my_book_collection_all_users', JSON.stringify(updated));
-            return updated;
-          });
-          showToast(`સફળતાપૂર્વક યુઝર ખાતું ડિલીટ થયું: ${du.name}`);
-        }}
-        onUpdateUserRole={(rawUser) => {
-          const uu = sanitizeUserRole(rawUser);
-          saveUserToFirestore(uu).catch((err) => console.warn('Firestore update user role error:', err));
-          setAllUsers((prev) => {
-            const updated = prev.map((u) =>
-              u.id.toLowerCase() === uu.id.toLowerCase() ||
-              u.username.toLowerCase() === uu.username.toLowerCase()
-                ? uu
-                : u
-            );
-            localStorage.setItem('my_book_collection_all_users', JSON.stringify(updated));
-            return updated;
-          });
-          showToast(`✅ ${uu.name} નો રોલ બદલાઈને "${uu.role}" થયો!`);
-        }}
-      />
-
-      {/* PWA Install App Modal for Mobile & Desktop */}
-      <InstallAppModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
-        deferredPrompt={deferredPrompt}
-        onTriggerInstall={handleTriggerInstall}
-      />
-
-      {/* Delete Book Confirmation Dialog (Iframe & Mobile Safe) */}
-      {bookToDeleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl">
-            <div className="w-12 h-12 rounded-full bg-rose-950/80 border border-rose-500/50 flex items-center justify-center mx-auto text-rose-400">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="text-base font-bold text-white">પુસ્તક ડીલીટ કરવું છે?</h3>
-              <p className="text-xs text-slate-300">
-                શું આપ ખરેખર Book ID <span className="font-mono font-bold text-amber-400">#{bookToDeleteId}</span> ને લાઈબ્રેરી અને Firestore માંથી ડિલીટ કરવા માંગો છો?
-              </p>
-            </div>
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setBookToDeleteId(null)}
-                className="flex-1 py-2 px-3 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-all"
-              >
-                રદ કરો (Cancel)
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDeleteBook}
-                className="flex-1 py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-lg shadow-rose-600/30 cursor-pointer transition-all"
-              >
-                હા, ડીલીટ કરો
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Instant PDF Export Modal with User / All Filter */}
-      {pdfModalOrientation && (
-        <PDFExportModal
-          isOpen={!!pdfModalOrientation}
-          onClose={() => setPdfModalOrientation(null)}
-          orientation={pdfModalOrientation}
-          books={books}
-          isAdmin={currentUser?.role === 'Admin'}
-          theme={theme}
-          onSuccess={(fileName, count) => {
-            const newExport: PDFExportItem = {
-              id: 'PDF-' + Date.now(),
-              fileName,
-              orientation: pdfModalOrientation,
-              createdAt: new Date().toLocaleString(),
-              recordsCount: count,
-            };
-            setPdfExports((prev) => [newExport, ...prev]);
-            showToast(`✅ ${pdfModalOrientation} PDF તૈયાર થઈ ગઈ! (${count} Books)`);
+            setIsAdminPasswordOpen(false);
+            setPendingAdminAction(null);
+            setPendingTargetArticle(null);
           }}
         />
       )}
 
-      {/* Excel Import Dialog (Append below existing data or Replace) */}
-      {pendingExcelData && (
-        <ExcelImportModal
-          isOpen={!!pendingExcelData}
-          onClose={() => setPendingExcelData(null)}
-          fileName={pendingExcelData.fileName}
-          parsedBooks={pendingExcelData.parsedBooks}
-          parsedBorrowers={pendingExcelData.parsedBorrowers}
-          currentBooksCount={books.length}
-          nextBookId={generateNextBookID(books)}
-          onAppend={() => handleExecuteAppendImport(pendingExcelData.parsedBooks, pendingExcelData.parsedBorrowers, pendingExcelData.fileName)}
-          onReplace={() => handleExecuteReplaceImport(pendingExcelData.parsedBooks, pendingExcelData.parsedBorrowers, pendingExcelData.fileName)}
+      {isAddModalOpen && (
+        <AddIssueModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onSaveIssue={handleSaveNewIssue}
+          currentIssuesCount={issues.length}
+          currentIssue={currentIssue}
+          allIssues={issues}
+          cloudCategories={cloudCategories}
+          cloudAuthors={cloudAuthors}
         />
       )}
 
-      {/* Clear All Database Confirmation Dialog (Iframe & Mobile Safe) */}
-      {isClearConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl">
-            <div className="w-14 h-14 rounded-full bg-rose-950/80 border border-rose-500/50 flex items-center justify-center mx-auto text-rose-400 shadow-lg shadow-rose-900/30">
-              <Trash2 className="w-7 h-7" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-lg font-bold text-white">લાઈબ્રેરીનો તમામ ડેટા સાફ કરવો છે?</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                શું આપ ખરેખર લાઈબ્રેરીમાંથી હાજર તમામ <span className="font-bold text-amber-400 font-mono text-sm">{books.length}</span> પુસ્તકો હટાવવા માંગો છો?
-              </p>
-              <div className="p-3 bg-rose-950/30 border border-rose-800/40 rounded-xl text-left text-xs text-rose-200/90 space-y-1">
-                <p className="font-semibold text-rose-300 flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                  મહત્વની સૂચના:
-                </p>
-                <p>
-                  આનાથી લાઈબ્રેરી સાફ થઈને 0 પુસ્તકો થઈ જશે, જેથી તમે તમારી સાચી Excel ફાઈલ આસાનીથી અપલોડ કરી શકશો.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                disabled={isClearingInProgress}
-                onClick={() => setIsClearConfirmOpen(false)}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-              >
-                રદ કરો (Cancel)
-              </button>
-              <button
-                type="button"
-                disabled={isClearingInProgress}
-                onClick={handleExecuteClearDatabase}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/30 cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {isClearingInProgress ? (
-                  <span>સાફ થઈ રહ્યું છે...</span>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    <span>હા, બધો ડેટા સાફ કરો</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+      {isInstallGuideOpen && (
+        <InstallGuideModal
+          isOpen={isInstallGuideOpen}
+          onClose={() => setIsInstallGuideOpen(false)}
+        />
       )}
 
+      {isBookmarksOpen && (
+        <BookmarksDrawer
+          isOpen={isBookmarksOpen}
+          onClose={() => setIsBookmarksOpen(false)}
+          issues={issues}
+          bookmarkedArticleIds={bookmarkedArticleIds}
+          onSelectArticle={(issue, article) => {
+            handleSelectArticle(article, issue.id);
+          }}
+          onRemoveBookmark={handleToggleBookmark}
+        />
+      )}
+
+      {isBackupModalOpen && (
+        <BackupModal
+          isOpen={isBackupModalOpen}
+          onClose={() => setIsBackupModalOpen(false)}
+          issues={issues}
+          onImportIssues={(imported) => {
+            setIssues(imported);
+            if (imported.length > 0) setSelectedIssueId(imported[0].id);
+            setCloudSyncStatus('syncing');
+            saveAllIssuesToCloud(imported)
+              .then(() => setCloudSyncStatus('connected'))
+              .catch((err) => {
+                console.error('Failed to sync imported issues to cloud:', err);
+                setCloudSyncStatus('offline');
+              });
+          }}
+          onResetToDefaults={handleResetToDefaults}
+        />
+      )}
+
+      {isStatisticsOpen && (
+        <StatisticsModal
+          isOpen={isStatisticsOpen}
+          onClose={() => setIsStatisticsOpen(false)}
+          issues={issues}
+          bookmarkedCount={bookmarkedArticleIds.length}
+          onSelectArticle={(issue, article) => {
+            handleSelectArticle(article, issue.id);
+          }}
+          onSearchWord={(word) => {
+            setIsStatisticsOpen(false);
+            setActiveArticle(null);
+            setSearchQuery(word);
+          }}
+        />
+      )}
+
+      {/* PWA Smart Instant Update Prompt */}
     </div>
   );
 }

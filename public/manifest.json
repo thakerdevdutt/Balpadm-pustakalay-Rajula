@@ -1,22 +1,32 @@
 {
   "id": "/",
-  "short_name": "બાલપદ્મ પુસ્તકાલય",
-  "name": "બાલપદ્મ પુસ્તકાલય - રાજુલા",
-  "description": "બાલપદ્મ પુસ્તકાલય - રાજુલા - પુસ્તક સંગ્રહ અને લાઈબ્રેરી મેનેજમેન્ટ સિસ્ટમ",
-  "icons": [
-    {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
-      "sizes": "192x192 512x512 any",
-      "purpose": "any maskable"
-    }
-  ],
+  "name": "લેખ સંગ્રહ - સાપ્તાહિક વાચન મંચ",
+  "short_name": "લેખ સંગ્રહ",
+  "description": "સાપ્તાહિક લેખો માટેનું ડિજિટલ વાચન મંચ અને મોબાઇલ-ફ્રેન્ડલી રીડર એપ",
   "start_url": "/",
   "scope": "/",
-  "background_color": "#0f172a",
-  "theme_color": "#1e293b",
   "display": "standalone",
-  "orientation": "any",
-  "categories": ["books", "utilities", "productivity"]
+  "orientation": "portrait-primary",
+  "theme_color": "#24442E",
+  "background_color": "#FAF8F5",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }
-
