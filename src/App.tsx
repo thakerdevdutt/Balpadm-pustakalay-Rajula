@@ -227,6 +227,22 @@ export default function App() {
     return u;
   };
 
+  const isGuestAccountRecord = (u: any): boolean => {
+    if (!u) return false;
+    const id = String(u.id || '').toLowerCase().trim();
+    const username = String(u.username || '').toLowerCase().trim();
+    const name = String(u.name || '').toLowerCase().trim();
+    return (
+      id === 'guest_user' ||
+      id === 'guest' ||
+      username === 'guest' ||
+      username === 'guest_user' ||
+      name === 'guest user' ||
+      name === 'guest' ||
+      name.includes('guest')
+    );
+  };
+
   // User Authentication & Role State
   const [currentUser, setCurrentUser] = useState<AppUser>(() => {
     const saved = localStorage.getItem('my_book_collection_user');
@@ -241,8 +257,9 @@ export default function App() {
     return {
       id: 'guest_user',
       username: 'guest',
-      name: 'Guest User',
+      name: 'Guest user',
       role: 'User',
+      password: '1234',
     };
   });
 
@@ -251,7 +268,7 @@ export default function App() {
     if (saved) {
       try {
         const parsed: AppUser[] = JSON.parse(saved);
-        return parsed.map(sanitizeUserRole);
+        return parsed.filter((u) => !isGuestAccountRecord(u)).map(sanitizeUserRole);
       } catch (e) {
         console.error('Error parsing saved users:', e);
       }
@@ -519,7 +536,7 @@ export default function App() {
 
         // Populate cloud users from Firestore (source of truth)
         cloudUsers.forEach((u) => {
-          if (u && (u.id || u.username) && u.id !== 'guest_user') {
+          if (u && (u.id || u.username) && !isGuestAccountRecord(u)) {
             const key = (u.username || u.id).toLowerCase();
             const validPass = (u.password && u.password.trim() !== '') ? u.password.trim() : '1234';
 

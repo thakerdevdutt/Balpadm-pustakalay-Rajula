@@ -27,39 +27,85 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 }) => {
   const isLight = theme === 'light';
   const isSepia = theme === 'sepia';
-  // Default Admin and Super User accounts
+  const CANONICAL_GUEST: AppUser = {
+    id: 'guest_user',
+    username: 'guest',
+    name: 'Guest user',
+    role: 'User',
+    password: '1234'
+  };
+
+  const isGuestAccount = (u: any): boolean => {
+    if (!u) return false;
+    const id = String(u.id || '').toLowerCase().trim();
+    const username = String(u.username || '').toLowerCase().trim();
+    const name = String(u.name || '').toLowerCase().trim();
+    return (
+      id === 'guest_user' ||
+      id === 'guest' ||
+      username === 'guest' ||
+      username === 'guest_user' ||
+      name === 'guest user' ||
+      name === 'guest' ||
+      name.includes('guest')
+    );
+  };
+
+  // Default accounts: exactly ONE Guest user for general public, plus Admin and Super User
   const defaultAccounts: AppUser[] = [
+    CANONICAL_GUEST,
     { id: 'admin', username: 'admin', name: 'Devdutt Thaker', role: 'Admin', password: 'Malvee@0911', secondaryPassword: '0911' },
     { id: 'jignesh', username: 'jignesh', name: 'Jignesh Upadhyay', role: 'Super User', password: '1234' },
   ];
 
-  // Merge cloud users with defaults
+  // Merge cloud users with defaults, strictly preventing duplicate guest accounts
   const availableUsersMap = new Map<string, AppUser>();
-  defaultAccounts.forEach(u => availableUsersMap.set((u.username || u.id).toLowerCase(), u));
+  availableUsersMap.set('guest_user', CANONICAL_GUEST);
+
+  defaultAccounts.forEach(u => {
+    if (!isGuestAccount(u)) {
+      availableUsersMap.set((u.username || u.id).toLowerCase(), u);
+    }
+  });
+
   if (allUsers && Array.isArray(allUsers)) {
     allUsers.forEach(u => {
       if (u && (u.id || u.username)) {
-        availableUsersMap.set((u.username || u.id).toLowerCase(), u);
+        if (!isGuestAccount(u)) {
+          availableUsersMap.set((u.username || u.id).toLowerCase(), u);
+        }
       }
     });
   }
   
-  // Sort users: Admin first, Super User second, User third
-  const availableUsers = Array.from(availableUsersMap.values()).sort((a, b) => {
-    const roleRank: Record<string, number> = {
-      'Admin': 1,
-      'Super User': 2,
-      'User': 3,
-    };
-    const rankA = roleRank[a.role] || 3;
-    const rankB = roleRank[b.role] || 3;
-    if (rankA !== rankB) return rankA - rankB;
-    return a.name.localeCompare(b.name);
-  });
+  // Sort users: exactly ONE Guest user FIRST, then Admin, Super User, other Users
+  const availableUsers = Array.from(availableUsersMap.values())
+    .filter((u, index, self) => {
+      if (isGuestAccount(u)) {
+        return index === self.findIndex(isGuestAccount);
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const isGuestA = isGuestAccount(a);
+      const isGuestB = isGuestAccount(b);
+      if (isGuestA && !isGuestB) return -1;
+      if (!isGuestA && isGuestB) return 1;
 
-  const [selectedUserId, setSelectedUserId] = useState<string>('admin');
+      const roleRank: Record<string, number> = {
+        'Admin': 1,
+        'Super User': 2,
+        'User': 3,
+      };
+      const rankA = roleRank[a.role] || 3;
+      const rankB = roleRank[b.role] || 3;
+      if (rankA !== rankB) return rankA - rankB;
+      return a.name.localeCompare(b.name);
+    });
+
+  const [selectedUserId, setSelectedUserId] = useState<string>('guest_user');
   const [selectedUserObj, setSelectedUserObj] = useState<AppUser>(() => {
-    return availableUsers[0] || defaultAccounts[0];
+    return defaultAccounts[0];
   });
 
   useEffect(() => {
@@ -74,7 +120,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
   }, [availableUsers, selectedUserId]);
 
-  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('1234');
   const [showPasswordText, setShowPasswordText] = useState(false);
   const [showNewPasswordText, setShowNewPasswordText] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -89,6 +135,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const isAdminActive = Boolean(currentUser && currentUser.id !== 'guest_user' && currentUser.role === 'Admin');
 
   // Auto focus password box when modal opens or user form is closed
+  useEffect(() => {
+    if (isOpen) {
+      const guestAcc = availableUsers.find(u => u.id === 'guest_user' || (u.username || '').toLowerCase() === 'guest') || defaultAccounts[0];
+      setSelectedUserId(guestAcc.id);
+      setSelectedUserObj(guestAcc);
+      setPasswordInput('1234');
+      setErrorMsg('');
+      setChangePassSuccessMsg('');
+      setShowChangePasswordForm(false);
+      setShowAddUserForm(false);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen && !showAddUserForm && !showChangePasswordForm) {
       const timer = setTimeout(() => {
@@ -143,7 +202,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const handleSelectAccount = (u: AppUser) => {
     setSelectedUserId(u.id);
     setSelectedUserObj(u);
-    setPasswordInput('');
+    const isGuest = u.id === 'guest_user' || (u.username || '').toLowerCase() === 'guest' || (u.name || '').toLowerCase().includes('guest');
+    setPasswordInput(isGuest ? '1234' : '');
     setErrorMsg('');
     setChangePassSuccessMsg('');
     setShowChangePasswordForm(false);
@@ -160,6 +220,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
+    const isGuest = selectedUserObj.id === 'guest_user' || (selectedUserObj.username || '').toLowerCase() === 'guest' || (selectedUserObj.name || '').toLowerCase().includes('guest');
+
     // Dual/Multi Password verification for Admin or any user with secondaryPassword
     const primaryPass = selectedUserObj.password && selectedUserObj.password.trim() !== ''
       ? selectedUserObj.password.trim()
@@ -173,6 +235,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const isPassValid = 
       inputPass === primaryPass || 
       (secondaryPass && inputPass === secondaryPass) ||
+      (isGuest && (inputPass === '1234' || inputPass === '')) ||
       (isAdmin && (inputPass === '2585981' || inputPass === '0911' || inputPass === 'Malvee@0911'));
 
     if (!isPassValid) {
@@ -428,7 +491,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     {availableUsers.map((u) => {
                       const isSelected = selectedUserObj?.id === u.id || selectedUserObj?.username === u.username;
                       const isCurrentlyAdmin = isAdminActive;
-                      const canDelete = isCurrentlyAdmin && u.id !== 'admin' && u.username.toLowerCase() !== 'admin' && u.id !== currentUser?.id;
+                      const isGuest = u.id === 'guest_user' || (u.username || '').toLowerCase() === 'guest' || (u.name || '').toLowerCase().includes('guest');
+                      const canDelete = isCurrentlyAdmin && !isGuest && u.id !== 'admin' && u.username.toLowerCase() !== 'admin' && u.id !== currentUser?.id;
 
                 return (
                   <div
@@ -777,6 +841,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                         {showPasswordText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+
+                    {(selectedUserObj?.id === 'guest_user' || (selectedUserObj?.username || '').toLowerCase() === 'guest' || (selectedUserObj?.name || '').toLowerCase().includes('guest')) && (
+                      <div className={`mt-2 p-2 rounded text-xs flex items-center justify-between border ${
+                        isLight
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                          : isSepia
+                          ? 'bg-[#eaf2e7] border-[#86efac] text-[#183d16]'
+                          : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
+                      }`}>
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span>વાચક માટે બાય ડીફોલ્ટ પાસવર્ડ :</span>
+                        </span>
+                        <span className="font-mono font-bold bg-white dark:bg-emerald-900 px-2 py-0.5 rounded border border-emerald-400 text-emerald-700 dark:text-emerald-200">
+                          1234
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-end">

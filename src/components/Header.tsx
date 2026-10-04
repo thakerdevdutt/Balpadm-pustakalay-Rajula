@@ -158,6 +158,17 @@ export const Header: React.FC<HeaderProps> = ({
                 <ShieldCheck className={`w-3.5 h-3.5 ${isLight ? 'text-amber-700' : isSepia ? 'text-amber-800' : 'text-amber-400'}`} />
                 <span>SUPER USER</span>
               </span>
+            ) : (currentUser.id === 'guest_user' || (currentUser.username || '').toLowerCase() === 'guest' || (currentUser.name || '').toLowerCase().includes('guest')) ? (
+              <span className={`flex items-center gap-1 border px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                isLight
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                  : isSepia
+                  ? 'bg-[#ecfdf5] text-emerald-900 border-emerald-300'
+                  : 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+              }`}>
+                <UserCheck className={`w-3.5 h-3.5 ${isLight ? 'text-emerald-700' : isSepia ? 'text-emerald-800' : 'text-emerald-400'}`} />
+                <span>GUEST USER</span>
+              </span>
             ) : (
               <span className={`flex items-center gap-1 border px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                 isLight

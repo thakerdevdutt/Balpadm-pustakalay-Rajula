@@ -1,5 +1,5 @@
 import { BorrowerRecord } from '../types';
-import { formatDateToDDMMYYYY } from './dateUtils';
+import { formatDateToDDMMYYYY, parseDate } from './dateUtils';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -40,7 +40,8 @@ export function generateIssueListHtml(
     ? `<tr><td colspan="9" style="text-align: center; padding: 24px; color: #64748b; font-style: italic;">કોઈ ઈશ્યુ રેકોર્ડ ઉપલબ્ધ નથી (No Records Found)</td></tr>`
     : borrowers.map((b, idx) => {
         const isReturned = b.status === 'Returned';
-        const isOverdue = !isReturned && b.dueDate && new Date(b.dueDate) < now;
+        const dueDateObj = parseDate(b.dueDate);
+        const isOverdue = !isReturned && !!dueDateObj && dueDateObj < now;
 
         const statusLabel = isReturned
           ? '<span style="color: #15803d; font-weight: 700;">Returned</span>'
@@ -50,28 +51,11 @@ export function generateIssueListHtml(
 
         const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
 
-        // Calculate days book was kept
-        const parseD = (str?: string): Date | null => {
-          if (!str) return null;
-          const clean = str.trim();
-          if (clean.includes('/')) {
-            const p = clean.split('/');
-            if (p.length === 3) return new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]));
-          }
-          if (clean.includes('-')) {
-            const p = clean.split('-');
-            if (p.length === 3) {
-              if (p[0].length === 4) return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
-              return new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]));
-            }
-          }
-          const d = new Date(clean);
-          return isNaN(d.getTime()) ? null : d;
-        };
-
-        const issueDateObj = parseD(b.issueDate);
+        // Calculate days book was kept using parseDate (supporting DD-MM-YYYY and YYYY-MM-DD)
+        const issueDateObj = parseDate(b.issueDate);
+        const returnDateObj = parseDate(b.returnDate);
         // If returned, days until returnDate; otherwise, days until today (now)
-        const endDateObj = (isReturned && b.returnDate) ? parseD(b.returnDate) || now : now;
+        const endDateObj = (isReturned && returnDateObj) ? returnDateObj : now;
 
         let daysKept = 0;
         if (issueDateObj && endDateObj) {
