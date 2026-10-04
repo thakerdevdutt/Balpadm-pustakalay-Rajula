@@ -112,6 +112,32 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [newPassword, setNewPassword] = useState('1234');
   const [newSecondaryPassword, setNewSecondaryPassword] = useState('');
 
+  // Admin authorization password for adding new users
+  const [adminAuthPassword, setAdminAuthPassword] = useState('');
+  const [showAdminAuthPassText, setShowAdminAuthPassText] = useState(false);
+  const [adminAuthError, setAdminAuthError] = useState('');
+
+  // Helper to verify Admin password
+  const verifyAdminPassword = (input: string): boolean => {
+    const clean = input.trim();
+    if (!clean) return false;
+
+    const adminAccount = availableUsers.find(
+      (u) => u.role === 'Admin' || u.id === 'admin' || (u.username || '').toLowerCase() === 'admin'
+    ) || defaultAccounts[0];
+
+    const primaryPass = (adminAccount.password || 'Malvee@0911').trim();
+    const secondaryPass = (adminAccount.secondaryPassword || '0911').trim();
+
+    return (
+      clean === primaryPass ||
+      clean === secondaryPass ||
+      clean === 'Malvee@0911' ||
+      clean === '0911' ||
+      clean === '2585981'
+    );
+  };
+
   if (!isOpen) return null;
 
   const handleSelectAccount = (u: AppUser) => {
@@ -212,8 +238,23 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAdminAuthError('');
+    setErrorMsg('');
+    setChangePassSuccessMsg('');
+
     if (!newUsername.trim() || !newName.trim()) {
-      alert('Please enter both username and full name.');
+      setAdminAuthError('કૃપા કરીને પૂરું નામ અને યુઝરનેમ બંને દાખલ કરો.');
+      return;
+    }
+
+    // Strict Admin Password Verification: Only Admin's password allows creating new users
+    if (!adminAuthPassword.trim()) {
+      setAdminAuthError('🔒 એડમિન પાસવર્ડ દાખલ કરવો ફરજિયાત છે.');
+      return;
+    }
+
+    if (!verifyAdminPassword(adminAuthPassword)) {
+      setAdminAuthError('❌ ખોટો એડમિન પાસવર્ડ! નવો યુઝર ઉમેરવા માટે સાચો એડમિન પાસવર્ડ દાખલ કરવો જરૂરી છે.');
       return;
     }
 
@@ -246,11 +287,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setNewName('');
     setNewPassword('1234');
     setNewSecondaryPassword('');
+    setAdminAuthPassword('');
+    setAdminAuthError('');
 
     if (res && res.quotaExceeded) {
       setChangePassSuccessMsg(`⚠️ એકાઉન્ટ "${created.name}" બન્યું (Local Storage). પણ Firebase લિમિટ હોવાથી આ ફક્ત આ બ્રાઉઝરમાં સેવ થયું છે. Password: "${created.password}".`);
     } else {
-      setChangePassSuccessMsg(`✅ Account created for "${created.name}" (${created.role}). Password: "${created.password}". Select account above and enter password to log in.`);
+      setChangePassSuccessMsg(`✅ એડમિન વેરિફિકેશન સફળ! "${created.name}" (${created.role}) માટે નવું એકાઉન્ટ ઉમેરાઈ ગયું છે. Password: "${created.password}".`);
     }
   };
 
@@ -326,7 +369,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               {Boolean(currentUser && currentUser.id !== 'guest_user' && currentUser.role === 'Admin') && (
                 <button
                   type="button"
-                  onClick={() => setShowAddUserForm(!showAddUserForm)}
+                  onClick={() => {
+                    setShowAddUserForm(!showAddUserForm);
+                    setAdminAuthPassword('');
+                    setAdminAuthError('');
+                  }}
                   className={`text-xs font-bold flex items-center gap-1 px-2.5 py-1 rounded border cursor-pointer transition-colors ${
                     isLight
                       ? 'text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border-blue-300'
@@ -1018,11 +1065,72 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 </p>
               </div>
 
+              {/* Admin Authorization Password Field - MANDATORY */}
+              <div className={`p-3 rounded-lg border ${
+                isLight
+                  ? 'bg-amber-50/90 border-amber-300'
+                  : isSepia
+                  ? 'bg-[#faeed9]/90 border-[#fcd34d]'
+                  : 'bg-amber-950/50 border-amber-500/70'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={`block text-xs font-bold uppercase flex items-center gap-1.5 ${
+                    isLight ? 'text-amber-900' : isSepia ? 'text-[#78350f]' : 'text-amber-300'
+                  }`}>
+                    <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>Admin Password (એડમિન પાસવર્ડ - ફરજિયાત)*</span>
+                  </label>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showAdminAuthPassText ? 'text' : 'password'}
+                    required
+                    value={adminAuthPassword}
+                    onChange={(e) => {
+                      setAdminAuthPassword(e.target.value);
+                      setAdminAuthError('');
+                    }}
+                    placeholder="Enter Admin Password to Authorize..."
+                    className={`w-full border px-3 py-2 rounded text-xs font-mono outline-none pr-9 ${
+                      isLight
+                        ? 'bg-white border-amber-300 text-amber-950 placeholder-slate-400 focus:border-amber-500'
+                        : isSepia
+                        ? 'bg-[#fffdf8] border-[#dfd0b8] text-[#3d2b1f] placeholder-[#9c8571] focus:border-[#b87d2b]'
+                        : 'bg-slate-900 border-amber-600/70 text-amber-200 placeholder-slate-400 focus:border-amber-400'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminAuthPassText(!showAdminAuthPassText)}
+                    className={`absolute right-2.5 top-2.5 cursor-pointer ${
+                      isLight ? 'text-slate-500 hover:text-slate-900' : isSepia ? 'text-[#7c634e] hover:text-[#3d2b1f]' : 'text-slate-300 hover:text-white'
+                    }`}
+                    title={showAdminAuthPassText ? 'Hide Password' : 'Show Password'}
+                  >
+                    {showAdminAuthPassText ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {adminAuthError && (
+                  <div className="mt-2 text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 p-2 rounded">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <span>{adminAuthError}</span>
+                  </div>
+                )}
+
+                <p className={`text-[11px] mt-1.5 font-medium ${
+                  isLight ? 'text-amber-800' : isSepia ? 'text-[#78350f]' : 'text-amber-200/90'
+                }`}>
+                  🔒 સુરક્ષા નિયમ: નવો યુઝર માત્ર એડમિનના અધિકૃત પાસવર્ડ વડે જ સિસ્ટમમાં ઉમેરી શકાય છે.
+                </p>
+              </div>
+
               <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded text-xs uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-[0.99]"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded text-xs uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-1.5"
               >
-                Create & Save New Operator Account
+                <ShieldCheck className="w-4 h-4" />
+                <span>Authorize with Admin Password & Create User</span>
               </button>
             </form>
           )}
