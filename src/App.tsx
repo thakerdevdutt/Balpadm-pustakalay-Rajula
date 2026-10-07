@@ -319,7 +319,7 @@ export default function App() {
     if (currentUser && currentUser.name) {
       localStorage.setItem('my_book_collection_user', JSON.stringify(currentUser));
       setFormData((prev) => {
-        if (!isEditing || !prev.createdBy || prev.createdBy === 'Admin') {
+        if ((!isEditing || !prev.createdBy || prev.createdBy === 'Admin') && prev.createdBy !== currentUser.name) {
           return { ...prev, createdBy: currentUser.name };
         }
         return prev;

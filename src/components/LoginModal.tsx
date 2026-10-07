@@ -1,6 +1,37 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppUser, UserRole, AppTheme } from '../types';
 import { ShieldCheck, UserCheck, Lock, LogIn, Key, Users, CheckCircle2, UserPlus, Info, AlertTriangle, Trash2, Eye, EyeOff } from 'lucide-react';
+
+export const CANONICAL_GUEST: AppUser = {
+  id: 'guest_user',
+  username: 'guest',
+  name: 'Guest user',
+  role: 'User',
+  password: '1234'
+};
+
+export const isGuestAccount = (u: any): boolean => {
+  if (!u) return false;
+  const id = String(u.id || '').toLowerCase().trim();
+  const username = String(u.username || '').toLowerCase().trim();
+  const name = String(u.name || '').toLowerCase().trim();
+  return (
+    id === 'guest_user' ||
+    id === 'guest' ||
+    username === 'guest' ||
+    username === 'guest_user' ||
+    name === 'guest user' ||
+    name === 'guest' ||
+    name.includes('guest')
+  );
+};
+
+// Default accounts: exactly ONE Guest user for general public, plus Admin and Super User
+const DEFAULT_ACCOUNTS: AppUser[] = [
+  CANONICAL_GUEST,
+  { id: 'admin', username: 'admin', name: 'Devdutt Thaker', role: 'Admin', password: 'Malvee@0911', secondaryPassword: '0911' },
+  { id: 'jignesh', username: 'jignesh', name: 'Jignesh Upadhyay', role: 'Super User', password: '1234' },
+];
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -27,97 +58,61 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 }) => {
   const isLight = theme === 'light';
   const isSepia = theme === 'sepia';
-  const CANONICAL_GUEST: AppUser = {
-    id: 'guest_user',
-    username: 'guest',
-    name: 'Guest user',
-    role: 'User',
-    password: '1234'
-  };
 
-  const isGuestAccount = (u: any): boolean => {
-    if (!u) return false;
-    const id = String(u.id || '').toLowerCase().trim();
-    const username = String(u.username || '').toLowerCase().trim();
-    const name = String(u.name || '').toLowerCase().trim();
-    return (
-      id === 'guest_user' ||
-      id === 'guest' ||
-      username === 'guest' ||
-      username === 'guest_user' ||
-      name === 'guest user' ||
-      name === 'guest' ||
-      name.includes('guest')
-    );
-  };
+  // Memoized available users list (prevents infinite re-render loop)
+  const availableUsers = useMemo(() => {
+    const map = new Map<string, AppUser>();
+    map.set('guest_user', CANONICAL_GUEST);
 
-  // Default accounts: exactly ONE Guest user for general public, plus Admin and Super User
-  const defaultAccounts: AppUser[] = [
-    CANONICAL_GUEST,
-    { id: 'admin', username: 'admin', name: 'Devdutt Thaker', role: 'Admin', password: 'Malvee@0911', secondaryPassword: '0911' },
-    { id: 'jignesh', username: 'jignesh', name: 'Jignesh Upadhyay', role: 'Super User', password: '1234' },
-  ];
+    DEFAULT_ACCOUNTS.forEach((u) => {
+      if (!isGuestAccount(u)) {
+        map.set((u.username || u.id).toLowerCase(), u);
+      }
+    });
 
-  // Merge cloud users with defaults, strictly preventing duplicate guest accounts
-  const availableUsersMap = new Map<string, AppUser>();
-  availableUsersMap.set('guest_user', CANONICAL_GUEST);
-
-  defaultAccounts.forEach(u => {
-    if (!isGuestAccount(u)) {
-      availableUsersMap.set((u.username || u.id).toLowerCase(), u);
-    }
-  });
-
-  if (allUsers && Array.isArray(allUsers)) {
-    allUsers.forEach(u => {
-      if (u && (u.id || u.username)) {
-        if (!isGuestAccount(u)) {
-          availableUsersMap.set((u.username || u.id).toLowerCase(), u);
+    if (allUsers && Array.isArray(allUsers)) {
+      allUsers.forEach((u) => {
+        if (u && (u.id || u.username)) {
+          if (!isGuestAccount(u)) {
+            map.set((u.username || u.id).toLowerCase(), u);
+          }
         }
-      }
-    });
-  }
-  
-  // Sort users: exactly ONE Guest user FIRST, then Admin, Super User, other Users
-  const availableUsers = Array.from(availableUsersMap.values())
-    .filter((u, index, self) => {
-      if (isGuestAccount(u)) {
-        return index === self.findIndex(isGuestAccount);
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const isGuestA = isGuestAccount(a);
-      const isGuestB = isGuestAccount(b);
-      if (isGuestA && !isGuestB) return -1;
-      if (!isGuestA && isGuestB) return 1;
+      });
+    }
 
-      const roleRank: Record<string, number> = {
-        'Admin': 1,
-        'Super User': 2,
-        'User': 3,
-      };
-      const rankA = roleRank[a.role] || 3;
-      const rankB = roleRank[b.role] || 3;
-      if (rankA !== rankB) return rankA - rankB;
-      return a.name.localeCompare(b.name);
-    });
+    return Array.from(map.values())
+      .filter((u, index, self) => {
+        if (isGuestAccount(u)) {
+          return index === self.findIndex(isGuestAccount);
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const isGuestA = isGuestAccount(a);
+        const isGuestB = isGuestAccount(b);
+        if (isGuestA && !isGuestB) return -1;
+        if (!isGuestA && isGuestB) return 1;
+
+        const roleRank: Record<string, number> = {
+          Admin: 1,
+          'Super User': 2,
+          User: 3,
+        };
+        const rankA = roleRank[a.role] || 3;
+        const rankB = roleRank[b.role] || 3;
+        if (rankA !== rankB) return rankA - rankB;
+        return a.name.localeCompare(b.name);
+      });
+  }, [allUsers]);
 
   const [selectedUserId, setSelectedUserId] = useState<string>('guest_user');
-  const [selectedUserObj, setSelectedUserObj] = useState<AppUser>(() => {
-    return defaultAccounts[0];
-  });
 
-  useEffect(() => {
-    if (availableUsers.length > 0) {
-      const match = availableUsers.find(u => u.id === selectedUserId || u.username.toLowerCase() === selectedUserId.toLowerCase());
-      if (match) {
-        setSelectedUserObj(match);
-      } else {
-        setSelectedUserObj(availableUsers[0]);
-        setSelectedUserId(availableUsers[0].id);
-      }
-    }
+  // Derive selectedUserObj directly via useMemo to prevent state synchronization loops
+  const selectedUserObj: AppUser = useMemo(() => {
+    const match = availableUsers.find(
+      (u) => u.id === selectedUserId || (u.username || '').toLowerCase() === selectedUserId.toLowerCase()
+    );
+    return match || availableUsers[0] || CANONICAL_GUEST;
   }, [availableUsers, selectedUserId]);
 
   const [passwordInput, setPasswordInput] = useState('1234');
@@ -134,12 +129,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const isAdminActive = Boolean(currentUser && currentUser.id !== 'guest_user' && currentUser.role === 'Admin');
 
-  // Auto focus password box when modal opens or user form is closed
+  // Auto focus and reset when modal opens
   useEffect(() => {
     if (isOpen) {
-      const guestAcc = availableUsers.find(u => u.id === 'guest_user' || (u.username || '').toLowerCase() === 'guest') || defaultAccounts[0];
-      setSelectedUserId(guestAcc.id);
-      setSelectedUserObj(guestAcc);
+      setSelectedUserId('guest_user');
       setPasswordInput('1234');
       setErrorMsg('');
       setChangePassSuccessMsg('');
@@ -183,7 +176,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     const adminAccount = availableUsers.find(
       (u) => u.role === 'Admin' || u.id === 'admin' || (u.username || '').toLowerCase() === 'admin'
-    ) || defaultAccounts[0];
+    ) || DEFAULT_ACCOUNTS[1];
 
     const primaryPass = (adminAccount.password || 'Malvee@0911').trim();
     const secondaryPass = (adminAccount.secondaryPassword || '0911').trim();
@@ -201,7 +194,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const handleSelectAccount = (u: AppUser) => {
     setSelectedUserId(u.id);
-    setSelectedUserObj(u);
     const isGuest = u.id === 'guest_user' || (u.username || '').toLowerCase() === 'guest' || (u.name || '').toLowerCase().includes('guest');
     setPasswordInput(isGuest ? '1234' : '');
     setErrorMsg('');
@@ -290,7 +282,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       onAddUser(updatedUser);
     }
 
-    setSelectedUserObj(updatedUser);
     setChangePassSuccessMsg('Password updated successfully! Either valid password can be used for login.');
     setCurrentPasswordForChange('');
     setNewPasswordForChange('');
@@ -344,7 +335,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     
     // Select newly created user in list and hide form
     setSelectedUserId(created.id);
-    setSelectedUserObj(created);
     setShowAddUserForm(false);
     setNewUsername('');
     setNewName('');
@@ -608,8 +598,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                               type="button"
                               onClick={() => {
                                 if (selectedUserObj?.id === u.id || selectedUserObj?.username === u.username) {
-                                  setSelectedUserId('admin');
-                                  setSelectedUserObj(defaultAccounts[0]);
+                                  setSelectedUserId('guest_user');
                                 }
                                 if (onDeleteUser) onDeleteUser(u);
                                 setConfirmDeleteUserId(null);
@@ -732,7 +721,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                           onChange={(e) => {
                             const targetRole = e.target.value as UserRole;
                             const updated = { ...selectedUserObj, role: targetRole };
-                            setSelectedUserObj(updated);
                             if (onUpdateUserRole) {
                               onUpdateUserRole(updated);
                             } else if (onAddUser) {
