@@ -93,7 +93,8 @@ import {
   subscribeUsersFromFirestore,
   saveUserToFirestore,
   deleteUserFromFirestore,
-  setOnQuotaExceededListener
+  setOnQuotaExceededListener,
+  fetchLatestBooksFromFirestore
 } from './firebase';
 
 import { Header } from './components/Header';
@@ -111,6 +112,9 @@ import { PDFExportModal } from './components/PDFExportModal';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { CheckCircle2, Info, FileSpreadsheet, AlertTriangle, Trash2 } from 'lucide-react';
 import { formatDateToDDMMYYYY, getTodayDDMMYYYY } from './utils/dateUtils';
+
+// Application Master Version
+export const APP_VERSION = '1.0.1';
 
 export default function App() {
   // Helper to sanitize any garbled UTF-8 strings and standardize creator name:
@@ -133,13 +137,21 @@ export default function App() {
   };
 
   // Key for local persistence - strictly for user's custom saved database
-  const CURRENT_STORAGE_KEY = 'my_book_collection_user_books_v5000_clean';
+  const CURRENT_STORAGE_KEY = 'balpadma_books_v101_clean';
 
   // Helper to identify spillover books (ID >= 1000) from the user's other 1095 project
   const isSpilloverBook = (b: any): boolean => {
     if (!b || !b.bookId) return false;
     const num = parseInt(String(b.bookId).replace(/\D/g, ''), 10);
     return !isNaN(num) && num >= 1000;
+  };
+
+  // Helper to identify stale/zombie books from the old 164-239 batch
+  const isStaleExtraBook = (b: any): boolean => {
+    if (!b || !b.bookId) return false;
+    const num = parseInt(String(b.bookId).replace(/\D/g, ''), 10);
+    if (b.syncUid && num >= 164 && num <= 239) return true;
+    return false;
   };
 
   // Persistence state in localStorage - returns 0 if cleared, or user saved books / default catalog
@@ -152,8 +164,8 @@ export default function App() {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Strictly exclude any spillover books (ID >= 1000)
-          const validBooks = parsed.filter((b) => !isSpilloverBook(b));
+          // Strictly exclude any spillover or stale zombie books
+          const validBooks = parsed.filter((b) => !isSpilloverBook(b) && !isStaleExtraBook(b));
           if (validBooks.length > 0) {
             return validBooks.map(sanitizeBook);
           }
@@ -394,6 +406,23 @@ export default function App() {
     }
   };
 
+  // Evict all legacy localStorage keys and stale caches across all browsers and PCs
+  useEffect(() => {
+    try {
+      const savedVer = localStorage.getItem('balpadma_app_version');
+      if (savedVer !== APP_VERSION) {
+        localStorage.removeItem('my_book_collection_user_books_v5000_clean');
+        localStorage.removeItem('my_book_collection_user_books_v4000');
+        localStorage.removeItem('my_book_collection_user_books_v3000');
+        localStorage.removeItem('my_book_collection_user_books');
+        localStorage.removeItem('my_book_collection_books');
+        localStorage.setItem('balpadma_app_version', APP_VERSION);
+      }
+    } catch (e) {
+      console.warn('Version migration notice:', e);
+    }
+  }, []);
+
   // Sync state to localStorage
   useEffect(() => {
     localStorage.setItem('my_book_collection_local_dir', localDirectory);
@@ -472,39 +501,24 @@ export default function App() {
       const validCloudBooks = (cloudBooks || []).filter((b) => !isSpilloverBook(b));
 
       const localBooks = getAllLocalBooks();
-      let merged: Book[] = [];
-
       if (Array.isArray(validCloudBooks) && validCloudBooks.length > 0) {
         localStorage.removeItem('my_book_collection_is_cleared');
-        const bookMap = new Map<string, Book>();
-
-        localBooks.forEach((b) => {
-          if (b && b.bookId && !isSpilloverBook(b)) {
-            bookMap.set(String(b.bookId), sanitizeBook(b));
-          }
-        });
-
-        validCloudBooks.forEach((b) => {
-          if (b && b.bookId && !isSpilloverBook(b)) {
-            bookMap.set(String(b.bookId), sanitizeBook(b));
-          }
-        });
-
-        merged = Array.from(bookMap.values()).filter((b) => !isSpilloverBook(b));
-        localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(merged));
+        // Live Cloud Firestore is the absolute authority!
+        // We do NOT mix old local browser cache entries to prevent resurrecting deleted books on other PCs.
+        const authoritativeBooks = validCloudBooks.map(sanitizeBook);
+        setBooks(sortBooksIndependently(authoritativeBooks));
+        localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(authoritativeBooks));
       } else {
         const base = localBooks.length > 0 ? localBooks : IMPORTED_BOOKS;
-        merged = base.filter((b) => !isSpilloverBook(b)).map(sanitizeBook);
-        if (merged.length > 0 && localStorage.getItem('my_book_collection_is_cleared') !== 'true') {
-          localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(merged));
-          // Auto-seed cloud database so all 163 books are permanently stored in Firestore
-          bulkSaveBooksToFirestore(merged).catch((err) => {
-            console.warn('Sync 163 books to firestore notice:', err);
+        const validLocal = base.filter((b) => !isSpilloverBook(b) && !isStaleExtraBook(b)).map(sanitizeBook);
+        if (validLocal.length > 0 && localStorage.getItem('my_book_collection_is_cleared') !== 'true') {
+          localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(validLocal));
+          bulkSaveBooksToFirestore(validLocal).catch((err) => {
+            console.warn('Sync books to firestore notice:', err);
           });
         }
+        setBooks(sortBooksIndependently(validLocal));
       }
-
-      setBooks(sortBooksIndependently(merged));
     });
 
     const unsubMasters = subscribeMasterDataFromFirestore((cloudMasters) => {
@@ -962,6 +976,40 @@ export default function App() {
     showToast(`૧૦૦ નમૂનાના સાહિત્યિક પુસ્તકો લોડ થયા છે (${cleanDefault.length} Sample Books)`);
   };
 
+  // 7.4 Force Database Sync with Cloud Firestore (triggered by clicking version box)
+  const [isSyncingDatabase, setIsSyncingDatabase] = useState(false);
+
+  const handleForceSyncDatabase = async () => {
+    setIsSyncingDatabase(true);
+    try {
+      // 1. Evict any legacy/stale local browser storage
+      localStorage.removeItem('my_book_collection_user_books_v5000_clean');
+      localStorage.removeItem('my_book_collection_user_books_v4000');
+      localStorage.removeItem('my_book_collection_user_books');
+      localStorage.setItem('balpadma_app_version', APP_VERSION);
+
+      // 2. Fresh direct query from Firestore cloud database
+      const cloudBooks = await fetchLatestBooksFromFirestore();
+      if (cloudBooks && Array.isArray(cloudBooks) && cloudBooks.length > 0) {
+        const cleanCloud = cloudBooks.filter((b) => !isSpilloverBook(b) && !isStaleExtraBook(b)).map(sanitizeBook);
+        const sorted = sortBooksIndependently(cleanCloud);
+        setBooks(sorted);
+        localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(sorted));
+        showToast(`✅ v${APP_VERSION}: લેટેસ્ટ ડેટાબેઝ સફળતાપૂર્વક સિન્ક થયો! (${sorted.length} પુસ્તકો)`);
+      } else {
+        const cleanFallback = IMPORTED_BOOKS.map(sanitizeBook);
+        setBooks(cleanFallback);
+        localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(cleanFallback));
+        showToast(`✅ v${APP_VERSION}: ડેટાબેઝ સફળતાપૂર્વક રિફ્રેશ થયો! (${cleanFallback.length} પુસ્તકો)`);
+      }
+    } catch (err) {
+      console.warn('Sync database error:', err);
+      showToast(`⚠️ ડેટાબેઝ સિન્ક સંપન્ન (સ્થાનિક કેશ અપડેટ થઈ).`);
+    } finally {
+      setIsSyncingDatabase(false);
+    }
+  };
+
   const handleOpenBackups = () => {
     if (currentUser?.role !== 'Admin') {
       alert('⚠️ મનાઈ (Permission Denied): બેકઅપ ફોલ્ડર અને લોગ્સ જોવાનો અધિકાર ફક્ત મુખ્ય Admin પાસે છે.');
@@ -1383,6 +1431,9 @@ export default function App() {
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onSelectTheme={handleSelectTheme}
+        appVersion={APP_VERSION}
+        onSyncDatabase={handleForceSyncDatabase}
+        isSyncingDatabase={isSyncingDatabase}
       />
 
 

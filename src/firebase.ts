@@ -435,4 +435,22 @@ export const deleteUserFromFirestore = async (userId: string, username?: string)
   }
 };
 
+/**
+ * Direct fetch of all books from Firestore
+ */
+export const fetchLatestBooksFromFirestore = async (): Promise<Book[]> => {
+  const booksRef = collection(db, BOOKS_COLLECTION);
+  const snapshot = await getDocs(booksRef);
+  const list: Book[] = [];
+  snapshot.forEach((docSnap) => {
+    list.push(docSnap.data() as Book);
+  });
+  list.sort((a, b) => {
+    const numA = parseInt(String(a.bookId || '').replace(/\D/g, ''), 10) || 0;
+    const numB = parseInt(String(b.bookId || '').replace(/\D/g, ''), 10) || 0;
+    return numA !== numB ? numA - numB : String(a.bookId || '').localeCompare(String(b.bookId || ''));
+  });
+  return list;
+};
+
 

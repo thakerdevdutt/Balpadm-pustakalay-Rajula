@@ -41,6 +41,8 @@ export const FrameSearchList: React.FC<FrameSearchListProps> = ({
   const safeBooks = (Array.isArray(books) ? books : []).filter((b) => {
     if (!b || !b.bookId) return false;
     const num = parseInt(String(b.bookId).replace(/\D/g, ''), 10);
+    // Strictly filter out any old zombie spillover books (with syncUid in 164-239 range) or >= 1000
+    if ((b as any).syncUid && num >= 164 && num <= 239) return false;
     return !isNaN(num) && num < 1000;
   });
 

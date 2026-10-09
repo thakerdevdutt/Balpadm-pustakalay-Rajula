@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Upload, Database, BarChart3, User, ShieldCheck, UserCheck, LogOut, Key, Sun, Moon, BookOpen, Smartphone, Trash2 } from 'lucide-react';
+import { Download, Upload, Database, BarChart3, User, ShieldCheck, UserCheck, LogOut, Key, Sun, Moon, BookOpen, Smartphone, Trash2, RotateCw } from 'lucide-react';
 import { AppUser, AppTheme } from '../types';
 
 interface HeaderProps {
@@ -26,6 +26,9 @@ interface HeaderProps {
   theme?: AppTheme;
   onToggleTheme?: () => void;
   onSelectTheme?: (theme: AppTheme) => void;
+  appVersion?: string;
+  onSyncDatabase?: () => void;
+  isSyncingDatabase?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,6 +54,9 @@ export const Header: React.FC<HeaderProps> = ({
   theme = 'dark',
   onToggleTheme,
   onSelectTheme,
+  appVersion = '1.0.1',
+  onSyncDatabase,
+  isSyncingDatabase = false,
 }) => {
   const handleJSONFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </div>
         <div>
-          <h1 className="text-base sm:text-lg font-bold tracking-tight uppercase flex items-center flex-wrap gap-1.5">
+          <h1 className="text-base sm:text-lg font-bold tracking-tight uppercase flex items-center flex-wrap gap-2">
             <span
               id="header-app-title"
               className={
@@ -98,6 +104,38 @@ export const Header: React.FC<HeaderProps> = ({
             >
               બાલપદ્મ પુસ્તકાલય - રાજુલા
             </span>
+
+            {/* Interactive Version Box & Live Cloud Sync Trigger */}
+            <button
+              id="btn-version-sync"
+              type="button"
+              onClick={onSyncDatabase}
+              disabled={isSyncingDatabase}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold tracking-tight transition-all cursor-pointer border shadow-2xs group ${
+                isLight
+                  ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300'
+                  : isSepia
+                  ? 'bg-[#ede1cc] hover:bg-[#e4d6be] text-[#7c502b] border-[#dfd0b8]'
+                  : 'bg-blue-950/80 hover:bg-blue-900/90 text-blue-300 border-blue-500/50'
+              } ${isSyncingDatabase ? 'opacity-70 cursor-wait' : 'active:scale-95'}`}
+              title="Version 1.0.1 - ક્લિક કરવાથી તમામ કમ્પ્યુટર અને બ્રાઉઝરમાં લેટેસ્ટ ડેટાબેઝ તાત્કાલિક સિન્ક (Update) થશે!"
+            >
+              <RotateCw
+                className={`w-3.5 h-3.5 ${
+                  isSyncingDatabase
+                    ? 'animate-spin text-emerald-400'
+                    : isLight
+                    ? 'text-blue-600 group-hover:rotate-180 transition-transform duration-300'
+                    : isSepia
+                    ? 'text-[#7c502b] group-hover:rotate-180 transition-transform duration-300'
+                    : 'text-blue-400 group-hover:rotate-180 transition-transform duration-300'
+                }`}
+              />
+              <span>v{appVersion}</span>
+              <span className="text-[9px] uppercase font-sans font-semibold tracking-wider opacity-80 hidden sm:inline">
+                {isSyncingDatabase ? 'સિન્ક...' : 'SYNC'}
+              </span>
+            </button>
           </h1>
           <div
             className={`text-[11px] uppercase tracking-wider flex items-center gap-2 flex-wrap ${
