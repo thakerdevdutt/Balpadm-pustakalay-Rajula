@@ -1,0 +1,348 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Hind Vadodara', 'Noto Sans Gujarati', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-gujarati: 'Hind Vadodara', 'Noto Sans Gujarati', sans-serif;
+}
+
+@layer base {
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    font-family: 'Hind Vadodara', 'Noto Sans Gujarati', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+  }
+
+  input, button, select, textarea, optgroup {
+    font-family: inherit;
+  }
+}
+
+/* Light Mode Theme Overrides */
+.theme-light {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.theme-light .bg-slate-900 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.theme-light .bg-slate-800 {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.theme-light .bg-slate-800\/90,
+.theme-light .bg-slate-800\/80,
+.theme-light .bg-slate-800\/60,
+.theme-light .bg-slate-800\/40 {
+  background-color: rgba(248, 250, 252, 0.95) !important;
+  color: #0f172a !important;
+}
+
+.theme-light .bg-slate-900\/90,
+.theme-light .bg-slate-900\/60,
+.theme-light .bg-slate-900\/40 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  color: #0f172a !important;
+}
+
+.theme-light .bg-slate-700 {
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.theme-light .border-slate-700,
+.theme-light .border-slate-800,
+.theme-light .border-slate-600,
+.theme-light .border-slate-700\/80,
+.theme-light .border-slate-700\/50 {
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light .text-slate-100,
+.theme-light .text-slate-200,
+.theme-light .text-slate-300 {
+  color: #0f172a !important;
+}
+
+.theme-light .text-slate-400 {
+  color: #475569 !important;
+}
+
+.theme-light input,
+.theme-light select,
+.theme-light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light .odd\:bg-slate-800:nth-child(odd),
+.theme-light .odd\:bg-slate-900\/40:nth-child(odd) {
+  background-color: #ffffff !important;
+}
+
+.theme-light .even\:bg-slate-800\/60:nth-child(even),
+.theme-light .even\:bg-slate-800\/40:nth-child(even) {
+  background-color: #f1f5f9 !important;
+}
+
+.theme-light .hover\:bg-slate-700\/80:hover,
+.theme-light .hover\:bg-slate-700\/60:hover,
+.theme-light .hover\:bg-slate-800:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.theme-light #main-header {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-bottom-color: #cbd5e1 !important;
+}
+
+.theme-light #main-header h1,
+.theme-light #main-header h1 span,
+.theme-light #header-app-title {
+  color: #0f172a !important;
+}
+
+.theme-light #main-header .bg-slate-700 {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Sepia Mode Theme Overrides (Warm Parchment / Book Reading Mode) */
+.theme-sepia {
+  background-color: #f4ecd8 !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .bg-slate-900 {
+  background-color: #fdfaf3 !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .bg-slate-800 {
+  background-color: #f8f1e3 !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .bg-slate-800\/90,
+.theme-sepia .bg-slate-800\/80,
+.theme-sepia .bg-slate-800\/60,
+.theme-sepia .bg-slate-800\/40 {
+  background-color: rgba(248, 241, 227, 0.95) !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .bg-slate-900\/90,
+.theme-sepia .bg-slate-900\/60,
+.theme-sepia .bg-slate-900\/40 {
+  background-color: rgba(253, 250, 243, 0.95) !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .bg-slate-700 {
+  background-color: #ede1cc !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .bg-slate-700\/80,
+.theme-sepia .bg-slate-700\/60 {
+  background-color: rgba(237, 225, 204, 0.85) !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .border-slate-700,
+.theme-sepia .border-slate-800,
+.theme-sepia .border-slate-600,
+.theme-sepia .border-slate-700\/80,
+.theme-sepia .border-slate-700\/50 {
+  border-color: #dfd0b8 !important;
+}
+
+.theme-sepia .text-slate-100,
+.theme-sepia .text-slate-200,
+.theme-sepia .text-slate-300 {
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .text-slate-400 {
+  color: #7c634e !important;
+}
+
+.theme-sepia .text-slate-500 {
+  color: #967963 !important;
+}
+
+.theme-sepia input,
+.theme-sepia select,
+.theme-sepia textarea {
+  background-color: #fffdf8 !important;
+  color: #2e2015 !important;
+  border-color: #dfd0b8 !important;
+}
+
+.theme-sepia input::placeholder,
+.theme-sepia textarea::placeholder {
+  color: #9c8571 !important;
+}
+
+.theme-sepia .odd\:bg-slate-800:nth-child(odd),
+.theme-sepia .odd\:bg-slate-900\/40:nth-child(odd) {
+  background-color: #fffdf8 !important;
+}
+
+.theme-sepia .even\:bg-slate-800\/60:nth-child(even),
+.theme-sepia .even\:bg-slate-800\/40:nth-child(even) {
+  background-color: #f6ede0 !important;
+}
+
+.theme-sepia .hover\:bg-slate-700\/80:hover,
+.theme-sepia .hover\:bg-slate-700\/60:hover,
+.theme-sepia .hover\:bg-slate-800:hover {
+  background-color: #ede1cc !important;
+}
+
+.theme-sepia #main-header {
+  background-color: #f7efe1 !important;
+  color: #3d2b1f !important;
+  border-bottom-color: #dfd0b8 !important;
+}
+
+.theme-sepia #main-header h1,
+.theme-sepia #main-header h1 span,
+.theme-sepia #header-app-title {
+  color: #2e2015 !important;
+}
+
+.theme-sepia #main-header .bg-slate-700 {
+  background-color: #ede1cc !important;
+  color: #3d2b1f !important;
+  border-color: #dfd0b8 !important;
+}
+
+/* ==========================================================================
+   TABLE (#ListBox1) ROW & HEADER CONTRAST FOR LIGHT & SEPIA THEMES
+   ========================================================================== */
+.listbox-data-row:nth-child(odd) {
+  background-color: rgba(15, 23, 42, 0.7);
+  color: #f1f5f9;
+}
+.listbox-data-row:nth-child(even) {
+  background-color: rgba(30, 41, 59, 0.5);
+  color: #f1f5f9;
+}
+.listbox-data-row:hover {
+  background-color: rgba(51, 65, 85, 0.7);
+}
+
+/* Light Mode Table Rows */
+.theme-light #ListBox1 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.theme-light #ListBox1 thead,
+.theme-light #ListBox1 thead th {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light .listbox-data-row:nth-child(odd),
+.theme-light #ListBox1 tbody tr:nth-child(odd) {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.theme-light .listbox-data-row:nth-child(even),
+.theme-light #ListBox1 tbody tr:nth-child(even) {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.theme-light .listbox-data-row:hover,
+.theme-light #ListBox1 tbody tr:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.theme-light .listbox-data-row td,
+.theme-light #ListBox1 tbody tr td {
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Sepia Mode Table Rows */
+.theme-sepia #ListBox1 {
+  background-color: #fffdf8 !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia #ListBox1 thead,
+.theme-sepia #ListBox1 thead th {
+  background-color: #ede1cc !important;
+  color: #3d2b1f !important;
+  border-color: #dfd0b8 !important;
+}
+
+.theme-sepia .listbox-data-row:nth-child(odd),
+.theme-sepia #ListBox1 tbody tr:nth-child(odd) {
+  background-color: #fffdf8 !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .listbox-data-row:nth-child(even),
+.theme-sepia #ListBox1 tbody tr:nth-child(even) {
+  background-color: #f6ede0 !important;
+  color: #3d2b1f !important;
+}
+
+.theme-sepia .listbox-data-row:hover,
+.theme-sepia #ListBox1 tbody tr:hover {
+  background-color: #ede1cc !important;
+}
+
+.theme-sepia .listbox-data-row td,
+.theme-sepia #ListBox1 tbody tr td {
+  color: #3d2b1f !important;
+  border-color: #dfd0b8 !important;
+}
+
+/* Selected row in all themes */
+.listbox-data-row.is-selected,
+#ListBox1 tbody tr.is-selected,
+#ListBox1 tbody tr[class*="bg-indigo-600"] {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+
+.listbox-data-row.is-selected td,
+#ListBox1 tbody tr.is-selected td,
+#ListBox1 tbody tr[class*="bg-indigo-600"] td {
+  color: #ffffff !important;
+}
+
+/* Primary Action Buttons text crisp white */
+.theme-light button.bg-blue-600,
+.theme-sepia button.bg-blue-600,
+.theme-light button.bg-emerald-600,
+.theme-sepia button.bg-emerald-600,
+.theme-light button.bg-indigo-600,
+.theme-sepia button.bg-indigo-600,
+.theme-light button.bg-amber-600,
+.theme-sepia button.bg-amber-600,
+.theme-light button.bg-teal-600,
+.theme-sepia button.bg-teal-600,
+.theme-light button.bg-rose-600,
+.theme-sepia button.bg-rose-600,
+.theme-light button.bg-red-600,
+.theme-sepia button.bg-red-600 {
+  color: #ffffff !important;
+}

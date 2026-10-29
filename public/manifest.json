@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "short_name": "બાલપદ્મ પુસ્તકાલય",
+  "name": "બાલપદ્મ પુસ્તકાલય - રાજુલા",
+  "description": "બાલપદ્મ પુસ્તકાલય - રાજુલા - પુસ્તક સંગ્રહ અને લાઈબ્રેરી મેનેજમેન્ટ સિસ્ટમ",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512 any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#1e293b",
+  "display": "standalone",
+  "orientation": "any",
+  "categories": ["books", "utilities", "productivity"]
+}
+

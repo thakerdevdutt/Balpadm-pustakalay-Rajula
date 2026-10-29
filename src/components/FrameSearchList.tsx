@@ -1,0 +1,872 @@
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Book, SearchCriterion, BorrowerRecord } from '../types';
+import { resolveBookCreatedBy } from '../initialData';
+import { Search, Monitor, Apple, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Maximize2, Minimize2, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw, ListFilter, Trash2, ChevronDown, Check, BookOpen } from 'lucide-react';
+import { formatDateToDDMMYYYY, isDateOverdue } from '../utils/dateUtils';
+
+type SortField = 'Book ID' | 'Book Name' | 'Author' | 'Category' | 'Language' | 'Book Type' | 'Entry By';
+type SortDirection = 'asc' | 'desc';
+
+interface FrameSearchListProps {
+  books: Book[];
+  searchCriterion: SearchCriterion;
+  setSearchCriterion: (c: SearchCriterion) => void;
+  searchValue: string;
+  setSearchValue: (v: string) => void;
+  onSelectBook: (book: Book, shouldScrollToForm?: boolean) => void;
+  onDeleteBook: (bookId: string) => void;
+  onQuickIssue: (book: Book) => void;
+  onOpenLocalFile?: (book: Book) => void;
+  selectedBookId?: string;
+  languageMode: 'en' | 'gu' | 'both';
+  isAdmin?: boolean;
+  borrowers?: BorrowerRecord[];
+}
+
+export const FrameSearchList: React.FC<FrameSearchListProps> = ({
+  books = [],
+  searchCriterion,
+  setSearchCriterion,
+  searchValue,
+  setSearchValue,
+  onSelectBook,
+  onDeleteBook,
+  onQuickIssue,
+  onOpenLocalFile,
+  selectedBookId,
+  languageMode,
+  isAdmin = false,
+  borrowers = [],
+}) => {
+  const safeBooks = (Array.isArray(books) ? books : []).filter((b) => {
+    if (!b || !b.bookId) return false;
+    const num = parseInt(String(b.bookId).replace(/\D/g, ''), 10);
+    // Strictly filter out any old zombie spillover books (with syncUid in 164-239 range) or >= 1000
+    if ((b as any).syncUid && num >= 164 && num <= 239) return false;
+    return !isNaN(num) && num < 1000;
+  });
+
+  // Active borrowers map for fast lookup of issued books
+  const activeBorrowerMap = useMemo(() => {
+    const map = new Map<string, BorrowerRecord>();
+    if (Array.isArray(borrowers)) {
+      borrowers.forEach((b) => {
+        if (b && b.status === 'Issued' && b.bookId) {
+          map.set(String(b.bookId).trim(), b);
+        }
+      });
+    }
+    return map;
+  }, [borrowers]);
+
+  // Helper to get active borrower for a given book
+  const getActiveBorrowerForBook = (book: Book): BorrowerRecord | null => {
+    if (!book) return null;
+    const cleanId = String(book.bookId || '').trim();
+    if (cleanId && activeBorrowerMap.has(cleanId)) {
+      return activeBorrowerMap.get(cleanId)!;
+    }
+    if (book.isIssued || book.status === 'Issued' || book.currentBorrowerName) {
+      return {
+        issueId: 'ISS-ACTIVE',
+        bookId: book.bookId,
+        bookName: book.bookName,
+        borrowerName: book.currentBorrowerName || 'ઉધાર લેનાર',
+        address: '',
+        mobile: '',
+        issueDate: '',
+        dueDate: book.currentIssueDueDate || '',
+        status: 'Issued',
+      };
+    }
+    return null;
+  };
+
+  // OS Mode binding simulator (Windows RowSource vs Mac Variant Array)
+  const [osMode, setOsMode] = useState<'Windows' | 'Mac'>('Windows');
+  const [pageSize, setPageSize] = useState<number | 'ALL'>('ALL');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [isExpandedHeight, setIsExpandedHeight] = useState<boolean>(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Sorting state - Default is sorted on Book ID
+  const [sortField, setSortField] = useState<SortField>('Book ID');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Interactive suggestion dropdown state (matching Frame 1 Autocomplete)
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState<boolean>(false);
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState<number>(-1);
+  const searchDropdownRef = useRef<HTMLDivElement>(null);
+  const suggestionsListRef = useRef<HTMLUListElement>(null);
+
+  // Close search dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchDropdownRef.current &&
+        !searchDropdownRef.current.contains(event.target as Node) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(event.target as Node)
+      ) {
+        setIsSearchDropdownOpen(false);
+        setHighlightedSuggestionIndex(-1);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // When searchValue is reset (e.g. from RESET button), close dropdown and reset highlight
+  useEffect(() => {
+    if (!searchValue) {
+      setIsSearchDropdownOpen(false);
+      setHighlightedSuggestionIndex(-1);
+    }
+  }, [searchValue]);
+
+  // Scroll active suggestion into view when navigating with keyboard
+  useEffect(() => {
+    if (isSearchDropdownOpen && highlightedSuggestionIndex >= 0 && suggestionsListRef.current) {
+      const activeEl = suggestionsListRef.current.children[highlightedSuggestionIndex] as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [highlightedSuggestionIndex, isSearchDropdownOpen]);
+
+  // KeyCode = 13 (Enter) handler on cmb_SearchValue as per specification
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) {
+      return;
+    }
+
+    if (isSearchDropdownOpen && filteredSearchSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightedSuggestionIndex((prev) =>
+          prev < filteredSearchSuggestions.length - 1 ? prev + 1 : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightedSuggestionIndex((prev) =>
+          prev > 0 ? prev - 1 : filteredSearchSuggestions.length - 1
+        );
+        return;
+      }
+      if ((e.key === 'Enter' || e.keyCode === 13) && highlightedSuggestionIndex >= 0) {
+        e.preventDefault();
+        const chosen = filteredSearchSuggestions[highlightedSuggestionIndex];
+        if (chosen) {
+          setSearchValue(chosen);
+        }
+        setIsSearchDropdownOpen(false);
+        setHighlightedSuggestionIndex(-1);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setIsSearchDropdownOpen(false);
+        setHighlightedSuggestionIndex(-1);
+        return;
+      }
+    }
+
+    if (e.key === 'Enter' || e.keyCode === 13) {
+      e.preventDefault();
+      setIsSearchDropdownOpen(false);
+      // Shift focus to BTN_Reset as explicitly specified
+      const resetBtn = document.getElementById('BTN_Reset');
+      if (resetBtn) {
+        resetBtn.focus();
+      }
+    }
+  };
+
+  // Filter books dynamically based on cmb_search and cmb_SearchValue
+  const filteredBooks = useMemo(() => {
+    if (!searchValue.trim()) return safeBooks;
+    const query = searchValue.trim().toLowerCase();
+
+    return safeBooks.filter((book) => {
+      if (searchCriterion === 'All Fields') {
+        return (
+          (book.bookId && book.bookId.toLowerCase().includes(query)) ||
+          (book.bookName && book.bookName.toLowerCase().includes(query)) ||
+          (book.author && book.author.toLowerCase().includes(query)) ||
+          (book.category && book.category.toLowerCase().includes(query)) ||
+          (book.publisher && book.publisher.toLowerCase().includes(query)) ||
+          (book.language && book.language.toLowerCase().includes(query)) ||
+          (book.bookType && book.bookType.toLowerCase().includes(query)) ||
+          (book.remarks1 && book.remarks1.toLowerCase().includes(query)) ||
+          (book.createdBy && book.createdBy.toLowerCase().includes(query))
+        );
+      }
+
+      let fieldValue = '';
+      switch (searchCriterion) {
+        case 'Book ID':
+          fieldValue = book.bookId;
+          break;
+        case 'Book Name':
+          fieldValue = book.bookName;
+          break;
+        case 'Author':
+          fieldValue = book.author;
+          break;
+        case 'Publisher':
+          fieldValue = book.publisher;
+          break;
+        case 'Category':
+          fieldValue = book.category;
+          break;
+        case 'Language':
+          fieldValue = book.language;
+          break;
+        case 'Book Type':
+          fieldValue = book.bookType || '';
+          break;
+        case 'Entry By':
+          fieldValue = resolveBookCreatedBy(book.bookId, book.createdBy);
+          break;
+        default:
+          fieldValue = book.bookName;
+      }
+      return (fieldValue || '').toLowerCase().includes(query);
+    });
+  }, [safeBooks, searchCriterion, searchValue]);
+
+  // Sort books dynamically
+  const sortedBooks = useMemo(() => {
+    const list = [...filteredBooks];
+    list.sort((a, b) => {
+      let valA = '';
+      let valB = '';
+
+      if (sortField === 'Book ID') {
+        const numA = parseInt(a.bookId || '0', 10);
+        const numB = parseInt(b.bookId || '0', 10);
+        if (!isNaN(numA) && !isNaN(numB) && numA > 0 && numB > 0) {
+          return sortDirection === 'asc' ? numA - numB : numB - numA;
+        }
+        valA = a.bookId || '';
+        valB = b.bookId || '';
+      } else if (sortField === 'Book Name') {
+        valA = a.bookName || '';
+        valB = b.bookName || '';
+      } else if (sortField === 'Author') {
+        valA = a.author || '';
+        valB = b.author || '';
+      } else if (sortField === 'Category') {
+        valA = a.category || '';
+        valB = b.category || '';
+      } else if (sortField === 'Language') {
+        valA = a.language || '';
+        valB = b.language || '';
+      } else if (sortField === 'Book Type') {
+        valA = a.bookType || '';
+        valB = b.bookType || '';
+      } else if (sortField === 'Entry By') {
+        valA = resolveBookCreatedBy(a.bookId, a.createdBy);
+        valB = resolveBookCreatedBy(b.bookId, b.createdBy);
+      }
+
+      const comp = valA.localeCompare(valB, 'gu', { numeric: true, sensitivity: 'base' });
+      return sortDirection === 'asc' ? comp : -comp;
+    });
+    return list;
+  }, [filteredBooks, sortField, sortDirection]);
+
+  // Reset page to 1 when search query, criterion or page size changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchValue, searchCriterion, pageSize, sortField, sortDirection]);
+
+  const totalRecords = sortedBooks.length;
+  const effectivePageSize = pageSize === 'ALL' ? (totalRecords || 1) : pageSize;
+  const totalPages = Math.ceil(totalRecords / effectivePageSize) || 1;
+
+  const paginatedBooks = useMemo(() => {
+    if (pageSize === 'ALL') return sortedBooks;
+    const startIdx = (currentPage - 1) * effectivePageSize;
+    return sortedBooks.slice(startIdx, startIdx + effectivePageSize);
+  }, [sortedBooks, currentPage, effectivePageSize, pageSize]);
+
+  const startRecordNum = totalRecords === 0 ? 0 : (currentPage - 1) * effectivePageSize + 1;
+  const endRecordNum = pageSize === 'ALL' ? totalRecords : Math.min(currentPage * effectivePageSize, totalRecords);
+
+  // Column header click helper
+  const handleColumnHeaderClick = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // All available unique values for the currently selected search criterion
+  const availableCriterionOptions = useMemo(() => {
+    const setVals = new Set<string>();
+    safeBooks.forEach((b) => {
+      let val = '';
+      if (searchCriterion === 'Author') val = b.author;
+      else if (searchCriterion === 'Publisher') val = b.publisher;
+      else if (searchCriterion === 'Category') val = b.category;
+      else if (searchCriterion === 'Language') val = b.language;
+      else if (searchCriterion === 'Book Type') val = b.bookType || '';
+      else if (searchCriterion === 'Entry By') val = resolveBookCreatedBy(b.bookId, b.createdBy);
+      else if (searchCriterion === 'Book ID') val = b.bookId;
+      else if (searchCriterion === 'Book Name') val = b.bookName;
+
+      if (val && val.trim()) {
+        setVals.add(val.trim());
+      }
+    });
+    return Array.from(setVals).sort((a, b) => a.localeCompare(b, 'gu'));
+  }, [safeBooks, searchCriterion]);
+
+  // Generate filtered suggestions based on typing
+  const filteredSearchSuggestions = useMemo(() => {
+    if (!searchValue.trim()) {
+      return availableCriterionOptions.slice(0, 30);
+    }
+    const query = searchValue.trim().toLowerCase();
+    return availableCriterionOptions
+      .filter((opt) => opt.toLowerCase().includes(query))
+      .slice(0, 30);
+  }, [availableCriterionOptions, searchValue]);
+
+  return (
+    <section
+      id="frame-2-search-list"
+      className="bg-slate-800 text-white rounded shadow-lg flex flex-col overflow-hidden my-3 border-t-2 border-indigo-500"
+    >
+      {/* Frame 2 Header & Criteria Bar */}
+      <div className="p-3 border-b border-slate-700 flex items-center justify-between gap-4 flex-wrap bg-slate-800">
+        <h2 className="text-xs font-bold text-indigo-300 uppercase flex items-center gap-2">
+          <span className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></span>
+          <span>Search & List Window</span>
+        </h2>
+
+        <div className="flex items-center gap-2 flex-1 max-w-2xl flex-wrap sm:flex-nowrap">
+          <select
+            id="cmb_search"
+            value={searchCriterion}
+            onChange={(e) => {
+              setSearchCriterion(e.target.value as SearchCriterion);
+              setIsSearchDropdownOpen(false);
+              setHighlightedSuggestionIndex(-1);
+            }}
+            className="bg-slate-900 border border-slate-700 px-2.5 py-1 rounded text-xs font-medium text-slate-100 outline-none focus:border-indigo-500 shrink-0 cursor-pointer"
+          >
+            <option value="All Fields">All Fields (બધાજ ફીલ્ડ્સ)</option>
+            <option value="Book Name">Book Name (પુસ્તકનું નામ)</option>
+            <option value="Book ID">Book ID (આઈડી)</option>
+            <option value="Author">Author (લેખક)</option>
+            <option value="Publisher">Publisher (પ્રકાશક)</option>
+            <option value="Category">Category (વિભાગ/પ્રકાર)</option>
+            <option value="Language">Language (ભાષા)</option>
+            <option value="Book Type">Book Type (પુસ્તક પ્રકાર / સ્વરૂપ)</option>
+            <option value="Entry By">Entry By (એન્ટ્રી કરનાર)</option>
+          </select>
+
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 z-10" />
+            <input
+              id="cmb_SearchValue"
+              ref={searchInputRef}
+              type="text"
+              value={searchValue}
+              onChange={(e) => {
+                setSearchValue(e.target.value);
+                setIsSearchDropdownOpen(true);
+                setHighlightedSuggestionIndex(-1);
+              }}
+              onFocus={() => {
+                if (availableCriterionOptions.length > 0) {
+                  setIsSearchDropdownOpen(true);
+                }
+              }}
+              onClick={() => {
+                if (availableCriterionOptions.length > 0) {
+                  setIsSearchDropdownOpen(true);
+                }
+              }}
+              onKeyDown={handleKeyDown}
+              autoComplete="off"
+              className="w-full bg-slate-900 border border-slate-700 pl-8 pr-12 py-1 rounded text-xs outline-none focus:border-indigo-500 text-slate-100 placeholder-slate-500"
+              placeholder={`Search records by ${searchCriterion}...`}
+            />
+
+            <div className="absolute right-1.5 top-1.5 flex items-center gap-1 z-10">
+              {searchValue && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchValue('');
+                    setIsSearchDropdownOpen(false);
+                    setHighlightedSuggestionIndex(-1);
+                    if (searchInputRef.current) searchInputRef.current.focus();
+                  }}
+                  className="text-slate-400 hover:text-slate-200 text-xs px-1 leading-none cursor-pointer"
+                  title="Clear Search"
+                >
+                  ✕
+                </button>
+              )}
+              {availableCriterionOptions.length > 0 && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => {
+                    setIsSearchDropdownOpen((prev) => !prev);
+                    if (!isSearchDropdownOpen && searchInputRef.current) {
+                      searchInputRef.current.focus();
+                    }
+                  }}
+                  className="text-slate-400 hover:text-indigo-300 p-0.5 focus:outline-none cursor-pointer"
+                  title={`${searchCriterion} ની યાદી જુઓ`}
+                >
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                      isSearchDropdownOpen ? 'rotate-180 text-indigo-400' : ''
+                    }`}
+                  />
+                </button>
+              )}
+            </div>
+
+            {/* Custom Interactive Dropdown matching Frame 1 Autocomplete */}
+            {isSearchDropdownOpen && filteredSearchSuggestions.length > 0 && (
+              <div
+                ref={searchDropdownRef}
+                className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-slate-900 border border-slate-700 rounded-md shadow-2xl divide-y divide-slate-800 text-xs"
+              >
+                <div className="px-2.5 py-1 bg-slate-950/80 text-[10px] font-semibold text-slate-400 border-b border-slate-800 flex justify-between items-center">
+                  <span>{searchCriterion} સજેશન ({filteredSearchSuggestions.length})</span>
+                  <span className="text-[9px] text-slate-400">↑↓ નેવિગેટ • Enter સિલેક્ટ</span>
+                </div>
+                <ul ref={suggestionsListRef} className="py-1">
+                  {filteredSearchSuggestions.map((option, idx) => {
+                    const isHighlighted = idx === highlightedSuggestionIndex;
+                    const isSelected = option.toLowerCase() === searchValue.trim().toLowerCase();
+
+                    return (
+                      <li
+                        key={`${option}-${idx}`}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setSearchValue(option);
+                          setIsSearchDropdownOpen(false);
+                          setHighlightedSuggestionIndex(-1);
+                        }}
+                        onMouseEnter={() => setHighlightedSuggestionIndex(idx)}
+                        className={`px-3 py-1.5 cursor-pointer flex items-center justify-between transition-colors ${
+                          isHighlighted
+                            ? 'bg-indigo-600 text-white font-medium'
+                            : isSelected
+                            ? 'bg-slate-800 text-indigo-300 font-medium'
+                            : 'text-slate-200 hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="truncate">{option}</span>
+                        {isSelected && (
+                          <Check
+                            className={`w-3.5 h-3.5 shrink-0 ${
+                              isHighlighted ? 'text-white' : 'text-indigo-400'
+                            }`}
+                          />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <span id="lbl_TotalBooks" className="text-[10px] font-bold text-indigo-300 px-3 py-1 bg-slate-900 rounded-full border border-slate-700 uppercase shrink-0">
+            TOTAL BOOKS: {filteredBooks.length}
+          </span>
+        </div>
+      </div>
+
+      {/* View Height, Sort Controls & Pagination Bar */}
+      <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-700 text-[10px] text-slate-400 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-indigo-300 uppercase flex items-center gap-1">
+              <ListFilter className="w-3 h-3 text-indigo-400" />
+              <span>Rows Per View (જોવા માટે):</span>
+            </span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+              className="bg-slate-800 border border-indigo-500/50 rounded px-2 py-0.5 text-[10px] font-bold text-indigo-200 outline-none focus:border-indigo-400 cursor-pointer"
+            >
+              <option value="15">15 Rows (૧૫ પુસ્તકો)</option>
+              <option value="25">25 Rows</option>
+              <option value="50">50 Rows</option>
+              <option value="100">100 Rows</option>
+              <option value="ALL">All ({totalRecords} Records - No Limit)</option>
+            </select>
+          </div>
+
+          <div className="h-3 w-[1px] bg-slate-700 hidden sm:block"></div>
+
+          {/* Sort Controls */}
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-indigo-300 uppercase flex items-center gap-1">
+              <ArrowUpDown className="w-3 h-3 text-indigo-400" />
+              <span>Sort By (ગોઠવવું):</span>
+            </span>
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as SortField)}
+              className="bg-slate-800 border border-indigo-500/50 rounded px-2 py-0.5 text-[10px] font-bold text-indigo-200 outline-none focus:border-indigo-400 cursor-pointer"
+            >
+              <option value="Book ID">Book ID (ડિફૉલ્ટ - આઈડી)</option>
+              <option value="Book Name">Book Name (પુસ્તકનું નામ)</option>
+              <option value="Author">Author (લેખક)</option>
+              <option value="Category">Category (પ્રકાર)</option>
+              <option value="Language">Language (ભાષા)</option>
+              {isAdmin && <option value="Book Type">Book Type (પુસ્તક પ્રકાર)</option>}
+              <option value="Entry By">Entry By (એન્ટ્રી કરનાર)</option>
+            </select>
+
+            <button
+              onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+              className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded text-[10px] transition-colors cursor-pointer"
+              title={`Switch order (${sortDirection === 'asc' ? 'Ascending A-Z' : 'Descending Z-A'})`}
+            >
+              {sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400" /> : <ArrowDown className="w-3 h-3 text-indigo-400" />}
+              <span>{sortDirection.toUpperCase()}</span>
+            </button>
+
+            {sortField !== 'Book ID' && (
+              <button
+                onClick={() => {
+                  setSortField('Book ID');
+                  setSortDirection('asc');
+                }}
+                className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold rounded text-[10px] transition-colors cursor-pointer"
+                title="Reset order to default Book ID"
+              >
+                <RotateCcw className="w-3 h-3 text-slate-400" />
+                <span>Reset (Book ID)</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={() => setIsExpandedHeight(!isExpandedHeight)}
+          className="flex items-center gap-1 px-2 py-0.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 font-bold rounded text-[10px] transition-colors cursor-pointer"
+          title={isExpandedHeight ? "Compact view" : "Expand full table view"}
+        >
+          {isExpandedHeight ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+          <span>{isExpandedHeight ? 'Compact Height' : 'Expand Height'}</span>
+        </button>
+      </div>
+
+      {/* ListBox Data Table */}
+      <div 
+        id="ListBox1-container" 
+        className={`flex-1 overflow-y-auto overflow-x-hidden border-t border-slate-700 transition-all ${
+          isExpandedHeight ? 'max-h-[600px] min-h-[350px]' : 'max-h-[460px] min-h-[300px]'
+        }`}
+      >
+        <table id="ListBox1" className="w-full text-left border-collapse table-fixed">
+          <thead className="sticky top-0 bg-slate-900 text-slate-300 uppercase text-xs font-semibold tracking-tight border-b border-slate-700 z-10 select-none">
+            <tr>
+              <th
+                onClick={() => handleColumnHeaderClick('Book ID')}
+                className={`px-1.5 md:px-2 py-2 border-r border-slate-700 w-14 md:w-[7%] text-center cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book ID' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                title="Click to sort by Book ID"
+              >
+                <div className="flex items-center justify-center gap-0.5">
+                  <span className="md:hidden text-[10px]">SR NO</span>
+                  <span className="hidden md:inline">BOOK ID</span>
+                  {sortField === 'Book ID' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleColumnHeaderClick('Book Name')}
+                className={`px-2 md:px-2.5 py-2 border-r border-slate-700 md:w-[25%] cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book Name' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                title="Click to sort by Book Name"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span>BOOK NAME (પુસ્તકનું નામ)</span>
+                  {sortField === 'Book Name' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleColumnHeaderClick('Author')}
+                className={`hidden md:table-cell px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[18%]' : 'w-[19%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Author' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                title="Click to sort by Author"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span>AUTHOR (લેખક)</span>
+                  {sortField === 'Author' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleColumnHeaderClick('Category')}
+                className={`hidden md:table-cell px-2.5 py-2 border-r border-slate-700 ${isAdmin ? 'w-[14%]' : 'w-[15%]'} cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Category' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                title="Click to sort by Category"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span>CATEGORY (પ્રકાર)</span>
+                  {sortField === 'Category' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleColumnHeaderClick('Language')}
+                className={`hidden md:table-cell px-2 py-2 border-r border-slate-700 w-[8%] cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Language' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                title="Click to sort by Language"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span>LANGUAGE</span>
+                  {sortField === 'Language' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleColumnHeaderClick('Book Type')}
+                className={`hidden md:table-cell px-2 py-2 border-r border-slate-700 w-[11%] text-center cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Book Type' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                title="Click to sort by Book Type"
+              >
+                <div className="flex items-center justify-center gap-0.5">
+                  <span>TYPE</span>
+                  {sortField === 'Book Type' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleColumnHeaderClick('Entry By')}
+                className={`hidden md:table-cell px-2 py-2 border-r border-slate-700 w-[10%] text-slate-300 cursor-pointer hover:bg-slate-800 transition-colors ${sortField === 'Entry By' ? 'text-indigo-300 bg-slate-800/80 font-bold' : ''}`}
+                title="Click to sort by Entry By"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span>ENTRY BY</span>
+                  {sortField === 'Entry By' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-400 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-400 shrink-0" />)}
+                </div>
+              </th>
+
+              <th
+                className={`px-1 py-2 ${isAdmin ? 'w-20 md:w-[7%]' : 'w-14 md:w-[5%]'} text-center text-slate-300 font-semibold`}
+                title={isAdmin ? "Book Status & Delete Action (ઈશ્યુ સ્ટેટસ / ડિલીટ)" : "Book Status (ઈશ્યુ સ્ટેટસ - હાજરી)"}
+              >
+                <div className="flex items-center justify-center gap-0.5">
+                  <span className="text-[10px] md:text-xs">{isAdmin ? 'ACTION' : 'STATUS'}</span>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="text-sm">
+            {books.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center text-slate-300 font-sans bg-slate-900 space-y-2">
+                  <div className="text-base font-bold text-slate-100">હાલમાં કોઈ પુસ્તક ડેટા નથી (0 Books)</div>
+                  <div className="text-xs text-slate-400 max-w-md mx-auto">
+                    તમારો પોતાનો સાચો Excel ડેટા લોડ કરવા માટે ઉપરના હેડરમાં આવેલા 
+                    <span className="font-bold text-indigo-400 mx-1">"IMPORT .XLSX"</span> અથવા 
+                    <span className="font-bold text-emerald-400 mx-1">"GOOGLE SHEET SYNC"</span> બટન પર ક્લિક કરો.
+                  </div>
+                </td>
+              </tr>
+            ) : paginatedBooks.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400 italic font-sans bg-slate-900">
+                  કોઈ પુસ્તક મળ્યું નથી matching "{searchValue}". (શોધ સાફ કરવા ✕ બટન પર ક્લિક કરો)
+                </td>
+              </tr>
+            ) : (
+              paginatedBooks.map((book) => {
+                const isSelected = book.bookId === selectedBookId;
+                const activeBorrower = getActiveBorrowerForBook(book);
+                return (
+                  <tr
+                    key={book.bookId}
+                    onClick={() => onSelectBook(book, false)}
+                    onDoubleClick={() => onSelectBook(book, true)}
+                    title="સિંગલ-ક્લિક: પસંદ કરો | ડબલ-ક્લિક: ફોર્મમાં એડિટ કરો + PC પાથ Auto-Copy કરો"
+                    className={`listbox-data-row cursor-pointer border-b transition-colors ${
+                      isSelected
+                        ? 'is-selected bg-indigo-600 text-white border-b border-indigo-700 font-sans font-semibold'
+                        : 'border-slate-700/40'
+                    }`}
+                  >
+                    {/* 1. SR NO / BOOK ID */}
+                    <td className={`px-1.5 md:px-2 py-2 font-mono text-center truncate text-xs md:text-[13px] ${isSelected ? 'text-white' : 'font-semibold'}`}>
+                      {book.bookId}
+                    </td>
+
+                    {/* 2. BOOK NAME (with compact author/category on mobile) */}
+                    <td className="px-2 md:px-2.5 py-2 font-sans font-semibold text-[13.5px] md:text-[14.5px] leading-snug tracking-wide">
+                      <div className="truncate font-semibold">{book.bookName}</div>
+                      {/* On mobile: compact author • category subtitle */}
+                      <div className={`text-[11px] font-normal truncate md:hidden ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        {[book.author, book.category].filter(Boolean).join(' • ')}
+                      </div>
+                    </td>
+
+                    {/* 3. AUTHOR (Desktop only) */}
+                    <td className="hidden md:table-cell px-2.5 py-2 font-sans text-[14px] leading-snug truncate">
+                      {book.author}
+                    </td>
+
+                    {/* 4. CATEGORY (Desktop only) */}
+                    <td className="hidden md:table-cell px-2.5 py-2 font-sans text-[13.5px] leading-snug truncate">
+                      {book.category}
+                    </td>
+
+                    {/* 5. LANGUAGE (Desktop only) */}
+                    <td className="hidden md:table-cell px-2 py-2 font-sans text-[13.5px] leading-snug truncate">
+                      {book.language}
+                    </td>
+
+                    {/* 6. BOOK TYPE (Desktop only) */}
+                    <td className="hidden md:table-cell px-2 py-2 font-sans text-center text-xs truncate">
+                      {book.bookType || 'Digital PDF'}
+                    </td>
+
+                    {/* 7. ENTRY BY (Desktop only) */}
+                    <td className={`hidden md:table-cell px-2 py-2 font-sans text-xs truncate ${isSelected ? 'text-white' : 'opacity-90'}`}>
+                      {resolveBookCreatedBy(book.bookId, book.createdBy)}
+                    </td>
+                    <td
+                      className="px-1 py-1.5 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        {/* Book icon if issued (હાજરમાં નથી) - right before delete icon */}
+                        {activeBorrower ? (() => {
+                          const isOverdue = isDateOverdue(activeBorrower.dueDate);
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectBook(book, false);
+                                const borrowerSection = document.getElementById('frame-3-borrower-info');
+                                if (borrowerSection) {
+                                  borrowerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                              }}
+                              className={`p-1 rounded transition-all inline-flex items-center justify-center cursor-pointer shadow-sm ${
+                                isOverdue
+                                  ? (isSelected
+                                      ? 'bg-rose-600 hover:bg-rose-500 text-white font-bold ring-2 ring-rose-400 shadow-rose-900/50'
+                                      : 'bg-rose-500/30 hover:bg-rose-500/50 text-rose-300 hover:text-white border border-rose-500/80 shadow-rose-900/40 ring-1 ring-rose-500/60')
+                                  : (isSelected
+                                      ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold ring-2 ring-amber-300'
+                                      : 'bg-amber-500/25 hover:bg-amber-500/40 text-amber-300 hover:text-amber-100 border border-amber-500/70')
+                              }`}
+                              title={
+                                isOverdue
+                                  ? `🚨 અવધિ પૂરી થઈ ગઈ છે (મુદત વીતી ગઈ છે / OVERDUE)!\nઉધાર લેનાર: ${activeBorrower.borrowerName}\nનિયત પરત તારીખ (Due Date): ${formatDateToDDMMYYYY(activeBorrower.dueDate)}\nક્લિક કરો: નીચે Borrower Name અને વિગતો ભરાઈ જશે`
+                                  : `⚠️ પુસ્તક ઈશ્યુ કરેલ છે (હાજરમાં નથી)\nઉધાર લેનાર: ${activeBorrower.borrowerName}${activeBorrower.issueDate ? `\nતારીખ (Issue Date): ${formatDateToDDMMYYYY(activeBorrower.issueDate)}` : ''}${activeBorrower.dueDate ? `\nપરત તારીખ (Due Date): ${formatDateToDDMMYYYY(activeBorrower.dueDate)}` : ''}\nક્લિક કરો: નીચે Borrower Name અને વિગતો ભરાઈ જશે`
+                              }
+                            >
+                              <BookOpen className={`w-3.5 h-3.5 ${isOverdue ? 'text-rose-200 animate-bounce' : 'animate-pulse'}`} />
+                            </button>
+                          );
+                        })() : (
+                          !isAdmin ? (
+                            <span className="md:hidden text-[11px] text-slate-500 font-mono select-none" title="હાજરમાં છે (Available)">—</span>
+                          ) : null
+                        )}
+
+                        {/* Delete Book Record (Admin Only) */}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteBook(book.bookId);
+                            }}
+                            className={`p-1 rounded ${
+                              isSelected
+                                ? 'bg-indigo-800/80 hover:bg-slate-900 text-slate-200 hover:text-white border border-indigo-400/50'
+                                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-600'
+                            } transition-all inline-flex items-center justify-center cursor-pointer shadow-sm`}
+                            title={`પુસ્તક #${book.bookId} (${book.bookName}) Delete કરો`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination Footer Controls */}
+      <div className="bg-slate-900 px-3 py-1.5 border-t border-slate-700 flex items-center justify-between text-[11px] font-sans flex-wrap gap-2 text-slate-400">
+        <div className="font-semibold text-slate-300 flex items-center gap-2">
+          <span>Showing records <strong className="text-indigo-400 font-mono">{startRecordNum}</strong> to <strong className="text-indigo-400 font-mono">{endRecordNum}</strong> of <strong className="text-indigo-400 font-mono">{totalRecords}</strong> total</span>
+          {pageSize === 'ALL' && (
+            <span className="bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded font-bold text-[9px] uppercase tracking-wider border border-emerald-800">
+              100% Full Catalog Displayed
+            </span>
+          )}
+        </div>
+
+        {pageSize !== 'ALL' && totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="p-1 rounded bg-slate-800 border border-slate-700 disabled:opacity-30 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+              title="First Page"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="p-1 rounded bg-slate-800 border border-slate-700 disabled:opacity-30 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            
+            <span className="px-2.5 py-0.5 font-bold font-mono text-slate-200 bg-slate-800 border border-slate-700 rounded text-[11px]">
+              Page {currentPage} / {totalPages}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="p-1 rounded bg-slate-800 border border-slate-700 disabled:opacity-30 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+              title="Next Page"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="p-1 rounded bg-slate-800 border border-slate-700 disabled:opacity-30 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+              title="Last Page"
+            >
+              <ChevronsRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
